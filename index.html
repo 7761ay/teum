@@ -16,6 +16,16 @@
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
   #gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
   #gl.grabbing{cursor:grabbing}
+  #cur{position:fixed;left:0;top:0;width:26px;height:26px;margin:-13px 0 0 -13px;border:1.5px solid var(--ink);border-radius:50%;pointer-events:none;z-index:5;
+    display:grid;place-items:center;font:600 9px var(--mono);letter-spacing:.12em;color:var(--ink);transition:width .25s,height .25s,margin .25s,background .25s,border-color .25s,opacity .3s;opacity:0}
+  #cur span{opacity:0;transition:opacity .2s}
+  #cur.on{opacity:1}
+  #cur.hover{width:58px;height:58px;margin:-29px 0 0 -29px;background:rgba(255,255,255,.55);backdrop-filter:blur(2px)}
+  #cur.hover span{opacity:1}
+  #cur.grab{width:18px;height:18px;margin:-9px 0 0 -9px;background:var(--blue);border-color:var(--blue)}
+  #cur.grab span{opacity:0}
+  .gapmode #cur{border-color:var(--amber)}
+  @media (hover:none){#cur{display:none}}
 
   .hud{position:fixed;left:0;right:0;pointer-events:none;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
   .top{top:0;display:flex;justify-content:space-between;align-items:flex-start;padding:14px 18px}
@@ -80,6 +90,7 @@
   </div>
 </div>
 
+<div id="cur"><span>PULL</span></div>
 <div id="gapText"><small id="gapLabel">틈</small><div id="gapPhrase"></div></div>
 <div id="log"></div>
 
@@ -802,6 +813,17 @@ canvas.addEventListener('pointerdown',e=>{
   squishStart(SQUISH_BASE[p.key]||50);
   S.typing=Math.min(1,S.typing+.15);
 });
+// 마우스를 따라 움직이기 (레퍼런스 3: 시차)
+const M={x:0,y:0,tx:0,ty:0,cx:innerWidth/2,cy:innerHeight/2,px:innerWidth/2,py:innerHeight/2}; let hovered=null;
+const curEl=document.getElementById('cur');
+addEventListener('pointermove',e=>{
+  M.tx=e.clientX/innerWidth*2-1; M.ty=-(e.clientY/innerHeight*2-1); M.px=e.clientX; M.py=e.clientY;
+  if (e.pointerType==='mouse') curEl.classList.add('on');
+  if (!grab && e.target===canvas){ setNDC(e); const h=ray.intersectObjects(Object.values(P).map(p=>p.mesh),false); hovered=h.length?h[0].object.userData.panel:null; }
+  else if (e.target!==canvas) hovered=null;
+  curEl.classList.toggle('hover',!!hovered && !grab);
+});
+document.addEventListener('pointerleave',()=>{ curEl.classList.remove('on'); hovered=null; M.tx=M.ty=0; });
 canvas.addEventListener('pointermove',e=>{
   if (!grab||e.pointerId!==grab.id) return;
   setNDC(e); const pt=new THREE.Vector3();
@@ -910,7 +932,11 @@ function loop(now){
   const d=S.depth, g=S.gapV, t=S.now;
 
   // board pose: 평면(2D) → 눕혀진 아이소메트릭(3D)
-  board.rotation.x = -d*.78;
+  board.rotation.x = -d*.78 - M.y*.1;
+  M.x=lerp(M.x,M.tx,1-Math.exp(-dt*4)); M.y=lerp(M.y,M.ty,1-Math.exp(-dt*4));
+  M.cx=lerp(M.cx,M.px,1-Math.exp(-dt*18)); M.cy=lerp(M.cy,M.py,1-Math.exp(-dt*18));
+  curEl.style.transform=`translate(${M.cx}px,${M.cy}px)`; curEl.classList.toggle('grab',!!grab);
+  board.rotation.y = M.x*.13;
   board.rotation.z = d*(layoutKey==='wide'? .34+.06*Math.sin(t*.12) : .12+.04*Math.sin(t*.12));
   board.position.y = 0;
   camera.position.set(Math.sin(t*.07)*d*.8, camY - d*1.0, camDist*(1+d*.1));
@@ -920,13 +946,16 @@ function loop(now){
   for (const p of Object.values(P)){
     const side = layoutKey==='wide' ? (p.cx<-.01?-1:1) : (p.cy>-1? 1:-1);
     p.bump*=Math.exp(-dt*6);
+    p.hover=lerp(p.hover||0,(hovered===p&&!grab)?1:0,1-Math.exp(-dt*8));
+    const layer=(Z3[p.key]||.5)*(1-g*.7);              // 높이 떠 있는 패널일수록 크게 움직임
+    const mx=M.x*layer*.16, my=M.y*layer*.12;
     const z = d*(Z3[p.key]||.4)*(.55+.6*S.chaos) + d*S.chaos*Math.sin(t*.9+p.seed)*.25 + p.bump*.2*d;
     const gx = layoutKey==='wide'? side*g*.85 : 0, gy = layoutKey==='wide'? side*g*.1 : side*g*.7;
-    p.group.position.set(p.cx+gx, p.cy+gy, z);
+    p.group.position.set(p.cx+gx+mx, p.cy+gy+my, z + p.hover*(.18+d*.25));
     p.group.rotation.set(d*S.chaos*Math.sin(t*.5+p.seed)*.28, d*S.chaos*Math.cos(t*.4+p.seed)*.28, g*side*.015 + d*S.chaos*Math.sin(t*.3+p.seed*2)*.06);
-    const sc=1-g*.04; p.group.scale.set(sc,sc,1);
-    p.shadow.position.set(p.cx+gx+z*.22, p.cy+gy-z*.3, -.66);
-    p.shadow.material.opacity = d*.5*clamp(1-z*.25,.3,1);
+    const sc=1-g*.04+p.hover*.025; p.group.scale.set(sc,sc,1);
+    const zz=z+p.hover*.4; p.shadow.position.set(p.cx+gx+mx*.4+zz*.22-M.x*zz*.12, p.cy+gy+my*.4-zz*.3-M.y*zz*.1, -.66);
+    p.shadow.material.opacity = Math.max(d*.5*clamp(1-z*.25,.3,1), p.hover*.35);
     p.simulate(dt,grab);
     p.draw(p.ctx,p.canvas.width,p.canvas.height); p.tex.needsUpdate=true;
     p.extras.forEach(e=>e.update(d));
