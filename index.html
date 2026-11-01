@@ -120,6 +120,25 @@ const HARD_INT = [1,6,11];                         // 단2도 · 트라이톤 ·
 const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const PENTA = [0,2,4,7,9];
 const W = 7;                                       // 틈을 판정하는 창의 길이
+// 특별한 말: 이 단어들은 쓰는 순간 반드시 화음이 된다
+const HARMONY_WORDS = ['결정의 빈자리','비둘기','사랑해','항상'];
+function bestRoot(notes){ // 음들을 가장 적게 움직이는 5음계의 으뜸음
+  let best=0, bestCost=1e9;
+  for (let r=0;r<12;r++){ let c=0; for (const n of notes){ let d=12; for (const p of PENTA){ const x=Math.abs(((n.pc-(p+r))%12+12)%12); d=Math.min(d,x,12-x); } c+=d; } if (c<bestCost){bestCost=c;best=r;} }
+  return best;
+}
+function quantize(n, r){ // 5음계 안으로 가장 가까운 음으로 옮기기
+  if (n.rest||n.noise||n.pc==null) return n;
+  let bm=n.midi, bd=99;
+  for (let m=n.midi-2;m<=n.midi+2;m++){ if (PENTA.includes(((m-r)%12+12)%12) && Math.abs(m-n.midi)<bd){ bd=Math.abs(m-n.midi); bm=m; } }
+  return {...n, midi:bm, pc:bm%12, hard:false, extra:null};
+}
+function matchWord(seq, idx){ // idx에서 끝나는 특별한 말 찾기
+  for (const w of HARMONY_WORDS){ const ch=[...w]; if (idx-ch.length+1<0) continue;
+    let ok=true; for (let k=0;k<ch.length;k++) if (seq[idx-ch.length+1+k].ch!==ch[k]){ ok=false; break; }
+    if (ok) return ch.length; }
+  return 0;
+}
 
 function charToNote(ch){
   if (ch===' '||ch==='\n'||ch==='.'||ch===',') return {ch, rest:true};
@@ -292,6 +311,16 @@ function scheduleStep(t){
   else if (!n.rest) playDissonant(n,t,STEP*(n.jong?1.6:1),vel);
   pushEv({t,type:'note',n,idx,vel});
   G.step++; G.next = t + STEP*(G.step%2?1.1:.9);
+  const wl = matchWord(seq, idx);
+  if (wl){
+    const raw=[], idxs=[]; for (let j=idx-wl+1;j<=idx;j++){ raw.push(seq[j]); idxs.push(j); }
+    const r=bestRoot(raw.filter(n=>!n.rest&&!n.noise)), win=raw.map(n=>quantize(n,r));
+    G.replay={notes:win, idxs, i:0, root:r}; G.cooldown=0;
+    const at=G.next;
+    beginGapAudio(at, r, wl*STEP*2.1+1.6, win);
+    pushEv({t:at,type:'gapStart',text:raw.map(x=>x.ch).join(''),root:r,idxs,word:true});
+    return;
+  }
   if (G.cooldown>0){ G.cooldown--; return; }
   if (len>=W){
     const win=[], idxs=[];
@@ -305,12 +334,19 @@ function scheduleStep(t){
     }
   }
 }
-function beginGapAudio(t, r, dur){
+function beginGapAudio(t, r, dur, chordNotes){
   noisyGate.gain.cancelScheduledValues(t); noisyGate.gain.setTargetAtTime(.03,t,.08);
   clusterGain.gain.cancelScheduledValues(t); clusterGain.gain.setTargetAtTime(0,t,.1);
   crowdGain.gain.cancelScheduledValues(t); crowdGain.gain.setTargetAtTime(0,t,.15);
   const base=48+r; [0,7,16].forEach((iv,i)=>pureOscs[i].frequency.setValueAtTime(mtof(base+iv),t));
   pureGain.gain.cancelScheduledValues(t); pureGain.gain.setTargetAtTime(.05,t,.4);
+  // 특별한 말: 단어의 음들을 한꺼번에 울리는 화음
+  if (chordNotes){
+    const pcs=[...new Set(chordNotes.filter(n=>!n.rest&&n.midi).map(n=>n.midi))].slice(0,6);
+    pcs.forEach((m,i)=>{ let mm=m; while(mm<57) mm+=12; while(mm>76) mm-=12;
+      const g=AC.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(.03,t+.05+i*.06); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+      const o=AC.createOscillator(); o.type='triangle'; o.frequency.value=mtof(mm); o.connect(g); g.connect(cleanBus); o.start(t+i*.06); o.stop(t+dur+.1); });
+  }
   // 패드 화음
   [0,7,14,16,21].forEach((iv,i)=>{
     const g=AC.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(.022,t+.8+i*.1); g.gain.linearRampToValueAtTime(0.0001,t+dur);
@@ -833,7 +869,7 @@ function applyEvent(e){
   } else if (e.type==='gapStart'){
     S.gapActive=true; S.gapRoot=e.root; S.gapText=e.text; S.gapIdxs=e.idxs;
     const key=e.text.trim(); const fresh=!S.found.has(key); S.found.set(key,(S.found.get(key)||0)+1);
-    gapPhrase.textContent='“'+e.text.trim()+'”'; gapLabel.textContent=`틈 · ${NAMES[e.root]} PENTATONIC · #${String(S.found.size).padStart(2,'0')}`;
+    gapPhrase.textContent='“'+e.text.trim()+'”'; gapLabel.textContent=`${e.word?'화음':'틈'} · ${NAMES[e.root]} PENTATONIC · #${String(S.found.size).padStart(2,'0')}`;
     document.getElementById('gapN').textContent=String(S.found.size).padStart(2,'0');
     renderLog(key,fresh);
     document.body.classList.add('gapmode');
