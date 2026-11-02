@@ -16,7 +16,7 @@
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
   #gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
   #gl.grabbing{cursor:grabbing}
-  #cur{position:fixed;left:0;top:0;width:26px;height:26px;margin:-13px 0 0 -13px;border:1.5px solid var(--ink);border-radius:50%;pointer-events:none;z-index:5;
+  #cur{position:fixed;left:0;top:0;width:26px;height:26px;margin:-13px 0 0 -13px;border:1.5px solid var(--ink);border-radius:50%;pointer-events:none;z-index:20;
     display:grid;place-items:center;font:600 9px var(--mono);letter-spacing:.12em;color:var(--ink);transition:width .25s,height .25s,margin .25s,background .25s,border-color .25s,opacity .3s;opacity:0}
   #cur span{opacity:0;transition:opacity .2s}
   #cur.on{opacity:1}
@@ -25,6 +25,8 @@
   #cur.grab{width:18px;height:18px;margin:-9px 0 0 -9px;background:var(--blue);border-color:var(--blue)}
   #cur.grab span{opacity:0}
   .gapmode #cur{border-color:var(--amber)}
+  .introing #cur{border-color:#e9d8ff;color:#fff}
+  .introing #cur.hover{background:rgba(168,85,247,.25)}
   @media (hover:none){#cur{display:none}}
 
   .hud{position:fixed;left:0;right:0;pointer-events:none;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
@@ -57,8 +59,18 @@
   #clear:hover{background:var(--ink);color:#fff}
   #hint{position:fixed;left:50%;bottom:4px;transform:translateX(-50%);font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:.04em;pointer-events:none;white-space:nowrap}
 
-  #intro{position:fixed;inset:0;display:grid;place-items:center;background:rgba(227,230,232,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:10;transition:opacity .6s}
-  #intro.hide{opacity:0;pointer-events:none}
+  #intro{position:fixed;inset:0;background:#07060a;z-index:10;cursor:none;overflow:hidden}
+  #intro canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #glitch{pointer-events:none;mix-blend-mode:screen}
+  #intro .i-top{position:absolute;top:18px;left:20px;right:20px;display:flex;justify-content:space-between;font:500 11px var(--mono);letter-spacing:.16em;color:rgba(235,225,255,.55);pointer-events:none}
+  #intro .i-bottom{position:absolute;left:0;right:0;bottom:7vh;text-align:center;color:#f3ecff;pointer-events:none;transition:opacity .4s}
+  #intro h1{font:300 clamp(44px,7vw,84px)/1 var(--sans);margin:0;letter-spacing:.02em;text-shadow:0 0 30px rgba(168,85,247,.6)}
+  #intro .i-bottom p{font:300 15px var(--sans);margin:10px 0 18px;color:rgba(243,236,255,.8);letter-spacing:.1em}
+  #intro small{font:500 11px var(--mono);letter-spacing:.14em;color:rgba(216,190,255,.75);animation:blink 2.4s ease-in-out infinite}
+  @keyframes blink{50%{opacity:.35}}
+  #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+  #intro.broken .i-bottom,#intro.broken .i-top{opacity:0}
+  @media (hover:none){#intro{cursor:auto}}
   .card{max-width:520px;padding:34px 34px 28px;background:#f4f5f6;border:1px solid rgba(21,23,26,.14);border-radius:18px;box-shadow:0 20px 60px rgba(20,30,50,.12)}
   .card .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
   .card h1{font-weight:600;font-size:44px;margin:6px 0 2px;letter-spacing:-.02em}
@@ -102,19 +114,15 @@
 <div id="hint">화면의 패널을 눌러 당겨 보세요 · 띄어쓰기도, 받침도 소리가 됩니다</div>
 
 <div id="intro">
-  <div class="card">
-    <div class="k">결정의 빈자리 · 2026</div>
+  <canvas id="gemGL"></canvas>
+  <canvas id="glitch"></canvas>
+  <div class="i-top"><span>결정의 빈자리 — 2026</span><span>結晶 / 決定</span></div>
+  <div class="i-bottom">
     <h1>틈</h1>
-    <h2>소란 속의 빈자리</h2>
-    <p>당신이 써 내려가는 말은 곧바로 음악이 됩니다. 다만 그 음악은 아름답기보다 어지럽고 요란합니다 — 바쁜 하루처럼.</p>
-    <p>그런데 아주 가끔, 소음이 걷히고 화면이 갈라지며 맑은 소리가 들리는 순간이 있습니다. 그 순간을 <b>틈</b>이라 부릅니다.</p>
-    <ul>
-      <li><b>쓰기</b> — 아래 칸에 무엇이든. 글자는 반복되며 연주됩니다</li>
-      <li><b>만지기</b> — 패널을 눌러 당기면 말랑하게 늘어나고 소리가 납니다</li>
-      <li><b>찾기</b> — 어떤 말이 틈을 여는지는, 써 봐야 압니다</li>
-    </ul>
-    <button id="start">소리를 켜고 들어가기</button>
+    <p>소란 속의 빈자리</p>
+    <small id="iHint">보석을 눌러 깨뜨리면 시작됩니다 · 소리가 켜집니다</small>
   </div>
+  <div id="flash"></div>
 </div>
 
 <script type="module">
@@ -912,7 +920,7 @@ const meter=document.getElementById('meter'); meter.innerHTML='<i></i>'.repeat(1
 const noiseV=document.getElementById('noiseV'), glyphN=document.getElementById('glyphN');
 let last=performance.now(), hudTick=0;
 function loop(now){
-  const dt=Math.min(1/30,(now-last)/1000); last=now;
+  const dt=Math.max(0,Math.min(1/30,(now-last)/1000)); last=now;
   S.now = AC? AC.currentTime : now/1000;
   while (events.length && AC && events[0].t<=S.now) applyEvent(events.shift());
   if (analyser){ analyser.getByteTimeDomainData(S.timeData); analyser.getByteFrequencyData(S.freqData);
@@ -974,11 +982,209 @@ function loop(now){
    10. START
    ========================================================= */
 const intro=document.getElementById('intro');
-document.getElementById('start').addEventListener('click',async()=>{
-  try{ if (!AC) initAudio(); await AC.resume(); }catch(err){ console.warn(err); }
-  S.started=true; intro.classList.add('hide'); txt.focus();
-  Object.values(P).forEach((p,i)=>setTimeout(()=>p.poke(.5,.5,2.2,1.4),i*40));
-});
+function startPiece(){
+  if (S.started) return;
+  try{ if (!AC) initAudio(); AC.resume(); }catch(err){ console.warn(err); }
+  S.started=true;
+  Object.values(P).forEach((p,i)=>setTimeout(()=>p.poke(.5,.5,2.2,1.4),600+i*40));
+}
+
+/* =========================================================
+   11. INTRO — 결정(結晶)이 깨지며 열리는 장면
+   ========================================================= */
+document.body.classList.add('introing');
+const gemCanvas=document.getElementById('gemGL'), glitchCv=document.getElementById('glitch'), gctx=glitchCv.getContext('2d'), flashEl=document.getElementById('flash');
+const I={t:0,mx:0,my:0,crack:0,hover:false,broken:false,bt:0,alive:true,shards:null,sx:0,sy:0,sr:100,streaks:[],gT:0};
+let IR=null;
+try{ IR=new THREE.WebGLRenderer({canvas:gemCanvas,antialias:true}); }catch(e){ IR=null; }
+
+function finishIntro(){
+  I.alive=false; document.body.classList.remove('introing');
+  intro.remove(); if (IR){ IR.dispose(); }
+  if (matchMedia('(hover:hover)').matches) txt.focus({preventScroll:true});
+}
+function shatterSound(){
+  if (!AC) return; const t=AC.currentTime+.01;
+  const s=noiseSrc(t,.9), f=AC.createBiquadFilter(), g=AC.createGain(); f.type='highpass'; f.frequency.value=2600;
+  env(g,t,.002,.32,.8); s.connect(f); f.connect(g); g.connect(master); g.connect(revIn);
+  for (let i=0;i<16;i++){ const tt=t+Math.random()*.6, o=AC.createOscillator(), gg=AC.createGain(); o.type='sine'; o.frequency.value=1800+Math.random()*5200;
+    env(gg,tt,.001,.03+Math.random()*.05,.25+Math.random()*1.2); o.connect(gg); gg.connect(cleanBus); o.start(tt); o.stop(tt+1.6); }
+  thud(t,.45);
+  [52,59,64,66,71,76].forEach((m,i)=>{ const o=AC.createOscillator(), gg=AC.createGain(); o.type=i%2?'triangle':'sine'; o.frequency.value=mtof(m);
+    gg.gain.setValueAtTime(.0001,t+.25); gg.gain.linearRampToValueAtTime(.024,t+.7+i*.08); gg.gain.exponentialRampToValueAtTime(.0001,t+5); o.connect(gg); gg.connect(cleanBus); o.start(t+.25); o.stop(t+5.1); });
+}
+
+if (!IR){
+  // WebGL이 없으면 단순히 누르면 시작
+  intro.addEventListener('click',()=>{ startPiece(); finishIntro(); },{once:true});
+} else {
+  IR.setPixelRatio(Math.min(devicePixelRatio,2));
+  IR.toneMapping=THREE.ACESFilmicToneMapping; IR.toneMappingExposure=1.2;
+  IR.outputColorSpace=THREE.SRGBColorSpace; IR.setClearColor(0x07060a,1);
+  const iScene=new THREE.Scene(), iCam=new THREE.PerspectiveCamera(35,1,.1,100); iCam.position.set(0,0,10);
+
+  // 보석을 비출 빛의 방 (환경맵)
+  const pm=new THREE.PMREMGenerator(IR), envS=new THREE.Scene();
+  const panel=(c,k,pos,sz)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(sz[0],sz[1]),new THREE.MeshBasicMaterial({color:new THREE.Color(c).multiplyScalar(k),side:THREE.DoubleSide})); m.position.set(...pos); m.lookAt(0,0,0); envS.add(m); };
+  panel('#ffffff',7,[0,6,2],[9,3]); panel('#9b5cff',5,[-6,0,1],[3,9]); panel('#5ad1ff',3.5,[6,-1,1],[2,7]); panel('#ff9d5c',2.5,[2,-5,-2],[3,2]); panel('#ffffff',4,[0,0,-7],[5,5]); panel('#d8b4fe',3,[5,4,-3],[2,2]);
+  iScene.environment=pm.fromScene(envS,.03).texture;
+  iScene.add(new THREE.AmbientLight(0xffffff,.4));
+  const pl=new THREE.PointLight(0xc084fc,30,20); pl.position.set(2,2,4); iScene.add(pl);
+
+  const gemMat=new THREE.MeshPhysicalMaterial({color:0xece2ff,metalness:0,roughness:.03,transmission:1,thickness:1.6,ior:2.2,dispersion:6,
+    iridescence:1,iridescenceIOR:1.5,iridescenceThicknessRange:[200,900],clearcoat:1,clearcoatRoughness:.04,flatShading:true,envMapIntensity:2.4,
+    attenuationColor:new THREE.Color('#a66bff'),attenuationDistance:2.2,specularIntensity:1});
+  let seed=11; const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+  function crystalGeo(detail,jit,stretch){
+    const g=new THREE.IcosahedronGeometry(1,detail), a=g.attributes.position.array, off=new Map();
+    for (let i=0;i<a.length;i+=3){ const k=a[i].toFixed(3)+','+a[i+1].toFixed(3)+','+a[i+2].toFixed(3);
+      if (!off.has(k)) off.set(k,[(rnd()-.5)*jit,(rnd()-.5)*jit,(rnd()-.5)*jit]);
+      const o=off.get(k); a[i]=(a[i]+o[0])*stretch[0]; a[i+1]=(a[i+1]+o[1])*stretch[1]; a[i+2]=(a[i+2]+o[2])*stretch[2];
+      a[i+1]*= 1 - .25*Math.abs(a[i+1])/stretch[1]; }
+    g.computeVertexNormals(); return g;
+  }
+  const gem=new THREE.Group(); iScene.add(gem);
+  const crystals=[];
+  [[-.15,.05,0,1.35,[1,1.2,.95],[.2,.3,.1]],[.55,1.35,-.4,.9,[.75,1.45,.75],[.35,0,-.55]],[.3,-1.35,.1,.95,[.8,1.4,.8],[-.25,.2,.6]],[-.85,-.55,.35,.55,[.7,1.2,.7],[.1,.5,.9]]].forEach(([x,y,z,sc,st,rot])=>{
+    const geo=crystalGeo(1,.28,st), m=new THREE.Mesh(geo,gemMat); m.position.set(x,y,z); m.scale.setScalar(sc); m.rotation.set(...rot); gem.add(m); crystals.push(m);
+    const core=new THREE.Mesh(new THREE.IcosahedronGeometry(.42,0),new THREE.MeshBasicMaterial({color:new THREE.Color('#b47cff').multiplyScalar(1.5)})); m.add(core);
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo,1),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.3,blending:THREE.AdditiveBlending,depthWrite:false})); m.add(edges); m.userData.edges=edges;
+  });
+  const radTex=(stops)=>{ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d'), g=x.createRadialGradient(64,64,0,64,64,64); stops.forEach(([o,col])=>g.addColorStop(o,col)); x.fillStyle=g; x.fillRect(0,0,128,128); return new THREE.CanvasTexture(c); };
+  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:radTex([[0,'rgba(168,85,247,.55)'],[.4,'rgba(126,34,206,.18)'],[1,'rgba(0,0,0,0)']]),blending:THREE.AdditiveBlending,depthWrite:false}));
+  glow.scale.set(9,9,1); glow.position.z=-1.5; gem.add(glow);
+  const starTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
+    const g=x.createRadialGradient(64,64,0,64,64,18); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(0,0,128,128);
+    x.globalCompositeOperation='lighter'; [[128,3],[3,128]].forEach(([w,h])=>{ const l=x.createLinearGradient(64-w/2,64-h/2,64+w/2,64+h/2); l.addColorStop(0,'rgba(255,255,255,0)'); l.addColorStop(.5,'rgba(255,255,255,.95)'); l.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=l; x.fillRect(64-w/2,64-h/2,w,h); });
+    return new THREE.CanvasTexture(c); })();
+  const sparkles=[];
+  for (let i=0;i<14;i++){ const c=crystals[i%crystals.length], a=c.geometry.attributes.position.array, v=Math.floor(rnd()*a.length/3)*3;
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:starTex,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,color:i%3?0xffffff:0xe9d5ff}));
+    sp.position.set(a[v],a[v+1],a[v+2]); sp.userData.ph=rnd()*6.28; sp.userData.sz=.25+rnd()*.5; c.add(sp); sparkles.push(sp); }
+
+  // 떠 있는 먼지와 작은 조각들 (레퍼런스 3: 층마다 다르게 움직임)
+  const dustLayers=[];
+  [[260,.012,-6,.25],[160,.02,-2,.6],[60,.03,2.5,1.2]].forEach(([n,size,z,depth])=>{
+    const pos=new Float32Array(n*3); for (let i=0;i<n;i++){ pos[i*3]=(rnd()-.5)*22; pos[i*3+1]=(rnd()-.5)*13; pos[i*3+2]=z+(rnd()-.5)*2; }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    const pts=new THREE.Points(g,new THREE.PointsMaterial({color:0xcdb4ff,size:size*10,map:starTex,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true}));
+    pts.userData.depth=depth; iScene.add(pts); dustLayers.push(pts); });
+  const minis=[];
+  for (let i=0;i<8;i++){ const m=new THREE.Mesh(crystalGeo(0,.35,[.7,1.3,.7]),gemMat); const sc=.07+rnd()*.14; m.scale.setScalar(sc);
+    m.position.set((rnd()-.5)*9,(rnd()-.5)*5.5,(rnd()-.3)*4); m.userData={base:m.position.clone(),ph:rnd()*6.28,depth:.3+(m.position.z+2)*.25,spin:rnd()-.5}; iScene.add(m); minis.push(m); }
+
+  function iResize(){ const w=innerWidth,h=innerHeight; IR.setSize(w,h,false); iCam.aspect=w/h;
+    const tn=Math.tan(THREE.MathUtils.degToRad(iCam.fov/2)); I.camZ=Math.max(4.4/tn, 3.2/(tn*iCam.aspect)); iCam.updateProjectionMatrix();
+    glitchCv.width=w*Math.min(devicePixelRatio,1.5); glitchCv.height=h*Math.min(devicePixelRatio,1.5); }
+  iResize(); addEventListener('resize',()=>{ if (I.alive) iResize(); });
+
+  const v3=new THREE.Vector3();
+  function gemScreen(){ iCam.position.set(I.mx*.3, I.my*.2-.7, I.camZ||13); iCam.lookAt(0,-.7,0); iCam.updateMatrixWorld(); gem.updateMatrixWorld(); v3.set(0,0,0).applyMatrix4(gem.matrixWorld).project(iCam);
+    if (!isFinite(v3.x)||!isFinite(v3.y)) return; I.sx=(v3.x+1)/2*innerWidth; I.sy=(1-v3.y)/2*innerHeight;
+    const dist=iCam.position.z-gem.position.z; I.sr=2.4/(dist*Math.tan(THREE.MathUtils.degToRad(iCam.fov/2)))*innerHeight/2; }
+
+  const COLS=['168,85,247','255,255,255','125,211,252','251,146,60','216,180,254','192,132,252'];
+  function drawGlitch(c){
+    const W=glitchCv.width, H=glitchCv.height, k=W/innerWidth, cx=I.sx*k, cy=I.sy*k, r=I.sr*k;
+    I.gT-=1;
+    if (I.gT<=0){ I.gT=3; I.streaks=[];
+      const n=Math.floor(10+c*110);
+      for (let i=0;i<n;i++){ const y=cy+(Math.random()*2-1)*r*.95, x0=cx+r*(Math.random()*.35-.05);
+        I.streaks.push({t:'s',x:x0,y,l:r*(.25+Math.pow(Math.random(),2)*3.6)*(.25+c),h:Math.random()<.8?1*k:(1+Math.random()*3)*k,c:COLS[Math.floor(Math.random()*COLS.length)],a:.35+Math.random()*.6}); }
+      const m=Math.floor(c*c*70);
+      for (let i=0;i<m;i++){ const s=(5+Math.random()*16)*k; I.streaks.push({t:'b',x:cx+r*(.05+Math.random()*.75*(.4+c)),y:cy+(Math.random()*2-1)*r*.8,s,a:.15+Math.random()*.55}); }
+    }
+    gctx.setTransform(1,0,0,1,0,0); gctx.clearRect(0,0,W,H); gctx.globalCompositeOperation='lighter';
+    for (const s of I.streaks){
+      if (s.t==='s'){ const g=gctx.createLinearGradient(s.x,0,s.x+s.l,0); g.addColorStop(0,`rgba(${s.c},${s.a})`); g.addColorStop(1,`rgba(${s.c},0)`); gctx.fillStyle=g; gctx.fillRect(s.x,s.y,s.l,s.h); }
+      else { gctx.fillStyle=`rgba(225,200,255,${s.a})`; gctx.fillRect(s.x,s.y,s.s,s.s); }
+    }
+    gctx.globalCompositeOperation='source-over';
+  }
+
+  function shatter(){
+    if (I.broken) return; I.broken=true; I.bt=0; intro.classList.add('broken');
+    startPiece(); shatterSound();
+    flashEl.style.transition='none'; flashEl.style.opacity='.85'; requestAnimationFrame(()=>{ flashEl.style.transition='opacity .7s ease-out'; flashEl.style.opacity='0'; });
+    gem.updateMatrixWorld(true);
+    const tris=[]; const a=new THREE.Vector3(), b=new THREE.Vector3(), c=new THREE.Vector3();
+    for (const m of crystals){ const p=m.geometry.attributes.position;
+      for (let i=0;i<p.count;i+=3){ a.fromBufferAttribute(p,i).applyMatrix4(m.matrixWorld); b.fromBufferAttribute(p,i+1).applyMatrix4(m.matrixWorld); c.fromBufferAttribute(p,i+2).applyMatrix4(m.matrixWorld);
+        const cen=a.clone().add(b).add(c).multiplyScalar(1/3);
+        const dir=cen.clone().sub(gem.position).normalize();
+        tris.push({cen, loc:[a.clone().sub(cen),b.clone().sub(cen),c.clone().sub(cen)],
+          vel:dir.multiplyScalar(2.5+Math.random()*5).add(new THREE.Vector3(1.5+Math.random()*3,(Math.random()-.5)*1.5,1+Math.random()*4)),
+          axis:new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize(), spin:(Math.random()-.5)*12}); } }
+    const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(tris.length*9),3));
+    const mat=gemMat.clone(); mat.transparent=true; mat.side=THREE.DoubleSide;
+    const mesh=new THREE.Mesh(geo,mat); mesh.frustumCulled=false; iScene.add(mesh);
+    // 반짝이는 가루
+    const N=500, pp=new Float32Array(N*3), pv=[]; for (let i=0;i<N;i++){ const t=tris[Math.floor(Math.random()*tris.length)].cen; pp.set([t.x,t.y,t.z],i*3);
+      pv.push(new THREE.Vector3(Math.random()-.3,Math.random()-.5,Math.random()-.3).normalize().multiplyScalar(2+Math.random()*9)); }
+    const pg=new THREE.BufferGeometry(); pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
+    const pts=new THREE.Points(pg,new THREE.PointsMaterial({map:starTex,color:0xe9d5ff,size:.22,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false})); iScene.add(pts);
+    I.shards={tris,geo,mat,pts,pg,pv,base:pp.slice()};
+    gem.visible=false;
+  }
+  const q=new THREE.Quaternion(), tv=new THREE.Vector3();
+  function updateShards(t){
+    const S2=I.shards, arr=S2.geo.attributes.position.array, e=(1-Math.exp(-t*2.4))*1.5;
+    S2.tris.forEach((tr,i)=>{ q.setFromAxisAngle(tr.axis,tr.spin*t);
+      for (let k=0;k<3;k++){ tv.copy(tr.loc[k]).applyQuaternion(q).add(tr.cen).addScaledVector(tr.vel,e); arr.set([tv.x,tv.y,tv.z],i*9+k*3); } });
+    S2.geo.attributes.position.needsUpdate=true;
+    S2.mat.opacity=clamp(1.6-t,0,1);
+    const pa=S2.pg.attributes.position.array, pe=(1-Math.exp(-t*1.8))*1.4;
+    for (let i=0;i<S2.pv.length;i++){ pa[i*3]=S2.base[i*3]+S2.pv[i].x*pe; pa[i*3+1]=S2.base[i*3+1]+S2.pv[i].y*pe; pa[i*3+2]=S2.base[i*3+2]+S2.pv[i].z*pe; }
+    S2.pg.attributes.position.needsUpdate=true; S2.pts.material.opacity=clamp(1.8-t,0,1);
+  }
+
+  // 가운데에서 갈라지며 열리기
+  const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+  function openCrack(t){
+    const w=ease(clamp((t-.3)/1.3,0,1))*62;
+    const m=w<=0?'none':`linear-gradient(90deg,#000 calc(50% - ${w}vw),transparent calc(50% - ${w}vw + 1px),transparent calc(50% + ${w}vw - 1px),#000 calc(50% + ${w}vw))`;
+    intro.style.maskImage=m; intro.style.webkitMaskImage=m;
+  }
+
+  intro.addEventListener('pointerdown',e=>{
+    if (I.broken) return;
+    const d=Math.hypot(e.clientX-I.sx,e.clientY-I.sy);
+    if (d<I.sr*.85) shatter();
+    else { I.crack=Math.min(1,I.crack+.25); const h=document.getElementById('iHint'); h.style.color='#fff'; setTimeout(()=>h.style.color='',400); }
+  });
+
+  let il=performance.now();
+  function introLoop(now){
+    if (!I.alive) return;
+    const dt=clamp((now-il)/1000,0,1/30); il=now; I.t+=dt;
+    I.mx=lerp(I.mx,M.tx,1-Math.exp(-dt*3)); I.my=lerp(I.my,M.ty,1-Math.exp(-dt*3));
+    if (!I.broken){
+      gemScreen();
+      const near=Math.hypot(M.px-I.sx,M.py-I.sy) < I.sr*.85 && curEl.classList.contains('on');
+      I.hover=near; I.crack = near? Math.min(1,I.crack+dt*.5) : Math.max(0,I.crack-dt*.3);
+      const jit=I.crack>.25? (I.crack-.25)*.06:0;
+      gem.rotation.y = I.t*.22 + I.mx*.8; gem.rotation.x = -I.my*.5 + Math.sin(I.t*.4)*.08; gem.rotation.z=Math.sin(I.t*.3)*.05;
+      gem.position.set(I.mx*.4+(Math.random()-.5)*jit, I.my*.3+Math.sin(I.t*.8)*.1+(Math.random()-.5)*jit, 0);
+      crystals.forEach((c,i)=>{ c.userData.edges.material.opacity=.25+.55*I.crack+.1*Math.sin(I.t*3+i); });
+      sparkles.forEach(sp=>{ const s=sp.userData.sz*(.4+.6*Math.max(0,Math.sin(I.t*2.2+sp.userData.ph)))*(1+I.crack*.6); sp.scale.set(s,s,1); });
+      glow.material.opacity=.8+.4*I.crack;
+      curEl.classList.toggle('hover',near); curEl.firstChild.textContent='TOUCH';
+      drawGlitch(.18+.82*I.crack);
+    } else {
+      I.bt+=dt; updateShards(I.bt); openCrack(I.bt);
+      drawGlitch(Math.max(0,1-I.bt*.9));
+      curEl.classList.remove('hover');
+      if (I.bt>1.85){ curEl.firstChild.textContent='PULL'; finishIntro(); return; }
+    }
+    dustLayers.forEach(p=>{ p.position.x=I.mx*p.userData.depth*.6; p.position.y=I.my*p.userData.depth*.4; p.rotation.z=I.t*.01*p.userData.depth; });
+    minis.forEach(m=>{ const u=m.userData; m.position.set(u.base.x+I.mx*u.depth*.7, u.base.y+I.my*u.depth*.5+Math.sin(I.t*.7+u.ph)*.15, u.base.z); m.rotation.x+=dt*u.spin; m.rotation.y+=dt*.4; });
+    iCam.position.set(I.mx*.3, I.my*.2-.7, I.camZ||13); iCam.lookAt(0,-.7,0);
+    IR.render(iScene,iCam);
+    requestAnimationFrame(introLoop);
+  }
+  requestAnimationFrame(introLoop);
+  window.__shatter=shatter; window.__I=I;
+}
 window.__S=S; window.__P=P; window.__setText=(v)=>{ txt.value=v; txt.dispatchEvent(new Event('input')); };
 (document.fonts? document.fonts.ready : Promise.resolve()).then(()=>{ resize(); requestAnimationFrame(loop); });
 resize();
