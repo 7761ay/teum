@@ -1079,7 +1079,7 @@ if (!IR){
   intro.addEventListener('click',()=>{ startPiece(); finishIntro(); },{once:true});
 } else {
   IR.setPixelRatio(Math.min(devicePixelRatio,2));
-  IR.outputColorSpace=THREE.SRGBColorSpace; IR.setClearColor(0x07060a,1);
+  IR.outputColorSpace=THREE.SRGBColorSpace; IR.setClearColor(0x07060a,0);
   const iScene=new THREE.Scene(), iCam=new THREE.PerspectiveCamera(35,1,.1,100);
   let seed=11; const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
   const starTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
@@ -1155,6 +1155,10 @@ if (!IR){
     const ptsM=new THREE.Points(g,new THREE.PointsMaterial({color:0xcdb4ff,size:size*10,map:starTex,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false}));
     ptsM.userData.depth=depth; iScene.add(ptsM); dustLayers.push(ptsM); });
 
+  // 더하기 합성 재질이 투명 캔버스의 알파를 건드리지 않도록 (배경 위에 빛만 더해짐)
+  function fixAdd(m){ m.blending=THREE.CustomBlending; m.blendEquation=THREE.AddEquation; m.blendSrc=THREE.SrcAlphaFactor; m.blendDst=THREE.OneFactor; m.blendSrcAlpha=THREE.ZeroFactor; m.blendDstAlpha=THREE.OneFactor; return m; }
+  iScene.traverse(o=>{ const ms=o.material? (Array.isArray(o.material)?o.material:[o.material]) : []; ms.forEach(m=>{ if (m.blending===THREE.AdditiveBlending) fixAdd(m); }); });
+  fixAdd(gemMat);
   function iResize(){ const w=innerWidth,h=innerHeight; IR.setSize(w,h,false); iCam.aspect=w/h; iCam.updateProjectionMatrix();
     const visH=2*10*Math.tan(THREE.MathUtils.degToRad(iCam.fov/2)), visW=visH*iCam.aspect;
     I.size=Math.min(visH*.6, visW*1.0); I.gy=visH*.08; I.visW=visW; I.visH=visH;
@@ -1376,41 +1380,49 @@ if (!IR){
       x.fillStyle='rgba(255,255,255,.05)'; for (let k=0;k<60;k++) x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5);
       if (Math.random()<.08){ const y=Math.random()*h, bh=3+Math.random()*14; x.drawImage(film,0,y*dpr,w*dpr,bh*dpr,(Math.random()-.5)*30,y,w,bh); } }
   }
-  // 3) 클릭: 레퍼런스의 랙 포커스 — 장미 장면이 초점을 잃고 어두워짐 → 스캔라인 보석이 앞으로 들어옴 → 진짜 보석으로
+  // 흐린 장미 배경: 장미 장면 → 보석 장면까지 같은 배경이 이어짐
+  const BG_SC=1.14;
+  function bgDraw(x,w,h){ x.globalAlpha=1; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
+    coverDraw(x,FM.wideBlur,w,h,BG_SC,-I.mx*w*.032,I.my*h*.032,'cover'); x.fillStyle='rgba(8,4,16,.62)'; x.fillRect(0,0,w,h);
+    const g=x.createRadialGradient(w/2,h*.45,Math.min(w,h)*.2,w/2,h*.45,Math.hypot(w,h)*.6); g.addColorStop(0,'rgba(5,3,8,0)'); g.addColorStop(1,'rgba(5,3,8,.55)'); x.fillStyle=g; x.fillRect(0,0,w,h); }
+  let coverSized=false;
+  function drawBgCover(){ if (!FM.ready) return; const w=innerWidth, h=innerHeight, dpr=Math.min(devicePixelRatio,1.5);
+    if (!coverSized){ coverCv.width=Math.round(w*dpr); coverCv.height=Math.round(h*dpr); coverSized=true; addEventListener('resize',()=>{ coverSized=false; }); }
+    cctx.setTransform(dpr,0,0,dpr,0,0); bgDraw(cctx,w,h); }
+  // 3) 클릭: 레퍼런스(4.46→5.78→6.12초)의 랙 포커스 — 1.3초 동안 초점이 나가고, 0.35초 만에 스캔라인 보석이 아래에서 올라옴
   let BR=null;
   window.__setBR=t=>{ if (BR) BR.t=t; };
   function breakRose(cx,cy){ if (I.stage!=='rose') return; BR={t:0,cx,cy}; I.stage='break'; I.pan=[0,0]; wall.style.display='none'; setHint(''); }
   function drawBreak(dt){
     const w=innerWidth, h=innerHeight, x=fctx, dpr=FM.dpr, T=(BR.t+=dt); x.setTransform(dpr,0,0,dpr,0,0);
-    const sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, px=-I.mx*w*.02, py=I.my*h*.02;
-    const blur=sm(T/1.1), sc=1.05+T*.02+sm(T/1.1)*.05, fadeBg=sm((T-2.1)/.9);
-    x.globalAlpha=1; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
-    // 1) 장미가 초점을 잃고 어두워짐
-    x.globalAlpha=(1-blur)*(1-fadeBg); coverDraw(x,FM.wide,w,h,sc,px,py,'cover');
-    x.globalAlpha=blur*(1-fadeBg); coverDraw(x,FM.wideBlur,w,h,sc*1.02,px*1.6,py*1.6,'cover');
-    x.globalAlpha=1; x.fillStyle=`rgba(8,4,16,${.12+blur*.5})`; x.fillRect(0,0,w,h);
-    I.rectA=lerp(I.rectA||0,0,1-Math.exp(-dt*6)); drawRects(x,dt,w,h,I.rectA);
-    // 2) 앞으로 선명한 스캔라인 보석이 미끄러져 들어옴 → 3) 가운데 진짜 보석 자리로 맞춰짐
-    const side=(I.sr||200)/.4, fx=I.sx+.08*side-side/2, fy=I.sy-side/2;
-    const inK=sm((T-.75)/1.0), settle=sm((T-1.8)/1.0);
-    const sx0=-side*.9+(-I.mx*w*.05), sideIn=side*1.35;
-    const gx=lerp(lerp(sx0,fx-side*.25,inK), fx, settle), gy=lerp(fy+side*.08, fy, settle), gs=lerp(sideIn, side, settle);
-    const scanA=clamp((T-.75)*3,0,1)*(1-sm((T-2.4)/.6));
-    if (scanA>0){ x.globalAlpha=scanA; x.globalCompositeOperation='lighter';
-      const judder=(Math.random()<.1 && T<2)?(Math.random()-.5)*10:0;
-      x.drawImage(FM.scan,gx+judder,gy,gs,gs); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
-    // 스캔라인 + 입자
-    x.globalAlpha=.9*(1-fadeBg*.6); x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
+    const sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, eo=v=>1-Math.pow(1-clamp(v,0,1),3), px=-I.mx*w*.02, py=I.my*h*.02;
+    const CUT=1.32;
+    if (T<CUT){ // 1) 장미가 초점을 잃고 어두워짐
+      const k=sm(T/CUT), sc=lerp(1.05+5*.012, BG_SC, k);
+      x.globalAlpha=1; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
+      x.globalAlpha=1-k; coverDraw(x,FM.wide,w,h,sc,px,py,'cover');
+      x.globalAlpha=k; coverDraw(x,FM.wideBlur,w,h,sc,lerp(px,-I.mx*w*.032,k),lerp(py,I.my*h*.032,k),'cover');
+      x.globalAlpha=1; x.fillStyle=`rgba(8,4,16,${.12+k*.5})`; x.fillRect(0,0,w,h);
+      I.rectA=lerp(I.rectA||0,0,1-Math.exp(-dt*6)); drawRects(x,dt,w,h,I.rectA);
+    } else bgDraw(x,w,h);   // 이후엔 보석 장면과 똑같은 흐린 장미 배경
+    // 2) 하드컷: 선명한 스캔라인 보석이 아래에서 위로 빠르게 올라옴 → 3) 진짜 보석으로
+    if (T>=CUT){
+      const side=(I.sr||200)/.4, fx=I.sx+.08*side-side/2, fy=I.sy-side/2, u=eo((T-CUT)/.35);
+      const gy=lerp(h+side*.05, fy, u)+(1-u)*side*.1, gs=side*lerp(1.12,1,u);
+      x.globalAlpha=1-sm((T-CUT-.55)/.45); x.globalCompositeOperation='lighter';
+      x.drawImage(FM.scan,fx-(gs-side)/2+((Math.random()<.15&&u<1)?(Math.random()-.5)*8:0),gy,gs,gs);
+      x.globalCompositeOperation='source-over'; x.globalAlpha=1;
+    }
+    x.globalAlpha=.9; x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
     x.fillStyle='rgba(255,255,255,.05)'; for (let k=0;k<50;k++) x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5);
-    // 진짜 보석이 드러나도록 필름 전체가 사라짐
-    film.style.opacity=String(1-sm((T-2.3)/.8));
-    if (T>3.15){ I.stage='gem'; film.style.display='none'; film.style.opacity='1'; intro.classList.remove('walling'); I.idle=0; BR=null; }
+    film.style.opacity=String(1-sm((T-CUT-.5)/.5));
+    if (T>CUT+1.05){ I.stage='gem'; film.style.display='none'; film.style.opacity='1'; intro.classList.remove('walling'); I.idle=0; BR=null; }
   }
 
   // 깨진 유리처럼: 금이 퍼지고 → 뾰족한 검은 조각들이 떨어져 나가며 본편이 드러남
   const coverCv=document.getElementById('cover'), cctx=coverCv.getContext('2d'); let SH=null;
   function buildShards(ix,iy){
-    const w=innerWidth, h=innerHeight, dpr=Math.min(devicePixelRatio,1.5); coverCv.width=w*dpr; coverCv.height=h*dpr;
+    const w=innerWidth, h=innerHeight, dpr=Math.min(devicePixelRatio,1.5); const bgSnap=document.createElement('canvas'); bgSnap.width=coverCv.width; bgSnap.height=coverCv.height; bgSnap.getContext('2d').drawImage(coverCv,0,0); coverCv.width=w*dpr; coverCv.height=h*dpr;
     const pts=[], C=11, Rr=8;
     for (let j=0;j<=Rr;j++) for (let i=0;i<=C;i++){ const e=i===0||j===0||i===C||j===Rr; pts.push([i/C*w+(e?0:(Math.random()-.5)*w/C*.8), j/Rr*h+(e?0:(Math.random()-.5)*h/Rr*.8)]); }
     const tris=[];
@@ -1422,7 +1434,7 @@ if (!IR){
       if (depth<3 && d<maxD*(.12+.1*(2-depth))){ const m=[cx+(Math.random()-.5)*20,cy+(Math.random()-.5)*20]; split([t[0],t[1],m],depth+1); split([t[1],t[2],m],depth+1); split([t[2],t[0],m],depth+1); }
       else out.push(t); };
     tris.forEach(t=>split(t,0));
-    SH={dpr,w,h,ix,iy,list:out.map(t=>{ const cx=(t[0][0]+t[1][0]+t[2][0])/3, cy=(t[0][1]+t[1][1]+t[2][1])/3, dx=cx-ix, dy=cy-iy, d=Math.hypot(dx,dy)+1;
+    SH={dpr,w,h,ix,iy,bgSnap,list:out.map(t=>{ const cx=(t[0][0]+t[1][0]+t[2][0])/3, cy=(t[0][1]+t[1][1]+t[2][1])/3, dx=cx-ix, dy=cy-iy, d=Math.hypot(dx,dy)+1;
       const sp=(1-d/maxD)*1400+300+Math.random()*500;
       return {t:t.map(p=>[p[0]-cx,p[1]-cy]),cx,cy,vx:dx/d*sp,vy:dy/d*sp-200*Math.random(),rot:(Math.random()-.5)*8,delay:d/maxD*.45,dz:.6+Math.random()*.8}; })};
   }
@@ -1433,7 +1445,7 @@ if (!IR){
       if (a<=0||sc<=0) continue;
       x.save(); x.translate(px,py); x.rotate(s.rot*tt); x.scale(sc,sc); x.globalAlpha=a;
       x.beginPath(); x.moveTo(s.t[0][0],s.t[0][1]); x.lineTo(s.t[1][0],s.t[1][1]); x.lineTo(s.t[2][0],s.t[2][1]); x.closePath();
-      x.fillStyle='#07060a'; x.fill();
+      x.save(); x.clip(); if (SH.bgSnap.width) x.drawImage(SH.bgSnap,-s.cx,-s.cy,w,h); else { x.fillStyle='#07060a'; x.fill(); } x.restore();
       // 금(크랙): 깨지는 순간 보라·하늘빛으로 번쩍
       const glow=clamp(1-Math.abs(T-.12-s.delay*.6)*4,0,1);
       if (glow>0||tt>0){ x.lineWidth=1.2/sc; x.strokeStyle=`rgba(${tt>0?"216,180,254":"139,227,255"},${Math.max(glow*.75,.4*a)})`; x.stroke(); }
@@ -1454,9 +1466,9 @@ if (!IR){
     for (let i=0;i<NP;i++){ v3.set(GC[0]+(Math.random()-.5)*.5,(Math.random()-.5)*.8,0).applyMatrix4(gem.matrixWorld); pp.set([v3.x,v3.y,v3.z],i*3);
       pv.push(new THREE.Vector3(Math.random()-.25,Math.random()-.5,Math.random()-.3).normalize().multiplyScalar(2+Math.random()*9)); }
     const pg=new THREE.BufferGeometry(); pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
-    const ptsM=new THREE.Points(pg,new THREE.PointsMaterial({map:starTex,color:0xe9d5ff,size:.2,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false})); iScene.add(ptsM);
+    const ptsM=new THREE.Points(pg,fixAdd(new THREE.PointsMaterial({map:starTex,color:0xe9d5ff,size:.2,transparent:true,depthWrite:false}))); iScene.add(ptsM);
     I.shards={pg,pv,base:pp.slice(),pts:ptsM};
-    buildShards(I.sx,I.sy); drawCover(0); intro.style.background='transparent'; IR.setClearColor(0x07060a,0);
+    buildShards(I.sx,I.sy); drawCover(0); intro.style.background='transparent';
   }
   function updateDust(t){ const S2=I.shards, pa=S2.pg.attributes.position.array, pe=(1-Math.exp(-t*1.8))*1.4;
     for (let i=0;i<S2.pv.length;i++){ pa[i*3]=S2.base[i*3]+S2.pv[i].x*pe; pa[i*3+1]=S2.base[i*3+1]+S2.pv[i].y*pe; pa[i*3+2]=S2.base[i*3+2]+S2.pv[i].z*pe; }
@@ -1507,6 +1519,7 @@ if (!IR){
     iCam.position.set(I.mx*.25, I.my*.15, 10); iCam.lookAt(0,0,0);
     if (!I.broken){
       gemScreen();
+      if (I.stage==='break'||I.stage==='gem') drawBgCover();
       if (I.stage!=='gem') wallStep(dt);
       const near=I.stage==='gem' && Math.hypot(M.px-I.sx,M.py-I.sy) < I.sr*1.15 && curEl.classList.contains('on');
       I.crack = I.stage!=='gem'? (I.found||0)*.7 : (near? Math.min(1,I.crack+dt*.5) : Math.max(0,I.crack-dt*.3));
