@@ -112,7 +112,7 @@
   <textarea id="txt" rows="1" maxlength="120" spellcheck="false" placeholder="지금 머릿속에 있는 말을 써 내려가 보세요"></textarea>
   <button type="button" id="clear">지우기</button>
 </form>
-<div id="hint">패널을 눌러 당겨 보세요 · 빈 곳을 끌면 판이 돌아갑니다 (더블클릭: 처음 각도)</div>
+<div id="hint">마우스를 움직이면 판이 돌아갑니다 · 패널을 눌러 당겨 보세요 · 빈 곳을 끌면 더 눕혀집니다 (더블클릭: 처음 각도)</div>
 
 <div id="intro">
   <canvas id="gemGL"></canvas>
@@ -846,10 +846,11 @@ const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
 let grab=null;
 function setNDC(e){ ndc.set(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1); ray.setFromCamera(ndc,camera); }
 // 빈 곳을 끌면 판 전체를 돌려 보기 (모서리에서 옆면까지 약 95°)
-const U={yaw:0,pitch:0,yawT:0,pitchT:0}; let orbit=null;
+const U={yaw:0,pitch:0,yawT:0,pitchT:0,hy:0,hp:.15}; let orbit=null, overCanvas=false;
+addEventListener('pointermove',e=>{ overCanvas = e.target===canvas; });
 canvas.addEventListener('pointermove',e=>{ if (!orbit||e.pointerId!==orbit.id) return;
   U.yawT+= (e.clientX-orbit.x)*.008; U.pitchT=clamp(U.pitchT+(e.clientY-orbit.y)*.007,-.6,1.3); orbit.x=e.clientX; orbit.y=e.clientY; });
-canvas.addEventListener('dblclick',()=>{ U.yawT=0; U.pitchT=0; });
+canvas.addEventListener('dblclick',()=>{ U.yawT=0; U.pitchT=0; U.hy=0; U.hp=.15; });
 canvas.addEventListener('pointerdown',e=>{
   setNDC(e);
   const hits=ray.intersectObjects(Object.values(P).map(p=>p.mesh),false);
@@ -982,12 +983,14 @@ function loop(now){
   const d=S.depth, g=S.gapV, t=S.now;
 
   // board pose: 평면(2D) → 눕혀진 아이소메트릭(3D)
-  U.yaw=lerp(U.yaw,U.yawT,1-Math.exp(-dt*6)); U.pitch=lerp(U.pitch,U.pitchT,1-Math.exp(-dt*6));
-  board.rotation.x = Math.max(-1.66, -d*.78 - M.y*.1 - U.pitch);
+  // 마우스를 대기만 해도 판이 돌아간다: 좌우 = 회전, 아래로 = 옆면 쪽으로 눕힘
+  if (overCanvas && !grab && !orbit){ U.hy = M.tx*.9; U.hp = clamp(-M.ty*.6+.15,-.45,.8); }
+  U.yaw=lerp(U.yaw,U.yawT+U.hy,1-Math.exp(-dt*3)); U.pitch=lerp(U.pitch,U.pitchT+U.hp,1-Math.exp(-dt*3));
+  board.rotation.x = clamp(-d*.78 - U.pitch, -1.66, .1);
   M.x=lerp(M.x,M.tx,1-Math.exp(-dt*4)); M.y=lerp(M.y,M.ty,1-Math.exp(-dt*4));
   M.cx=lerp(M.cx,M.px,1-Math.exp(-dt*18)); M.cy=lerp(M.cy,M.py,1-Math.exp(-dt*18));
   curEl.style.transform=`translate(${M.cx}px,${M.cy}px)`; curEl.classList.toggle('grab',!!grab);
-  board.rotation.y = M.x*.13;
+  board.rotation.y = 0;
   board.rotation.z = d*(layoutKey==='wide'? .34+.06*Math.sin(t*.12) : .12+.04*Math.sin(t*.12)) + U.yaw;
   board.position.y = 0;
   const oz=1+Math.min(.45,Math.abs(U.pitch)*.06+Math.abs(Math.sin(U.yaw))*.12); camera.position.set(Math.sin(t*.07)*d*.8, camY - d*1.0, camDist*(1+d*.1)*oz);
