@@ -94,7 +94,7 @@
 <body>
 <canvas id="gl"></canvas>
 
-<div class="hud top" id="hudTop">
+<div class="hud top" id="hudTop" hidden style="display:none">
   <div class="brand"><b>틈 — 소란 속의 빈자리</b><span>결정의 빈자리 · interactive score</span></div>
   <div class="stats">
     <div class="stat"><span>noise</span><b><span class="meter" id="meter"></span><em id="noiseV" style="font-style:normal">0.00</em></b></div>
@@ -795,7 +795,7 @@ function resize(){
   const w=innerWidth, h=innerHeight, key = w/h<.85?'tall':'wide';
   renderer.setSize(w,h,false); camera.aspect=w/h;
   if (key!==layoutKey || !P.text){ layoutKey=key; buildPanels(); dotsRebuild(); }
-  const top=64, bottom=118, avail=h-top-bottom, k=Math.min(w*.95/(BW+.4), avail*.97/(BH+.3));
+  const top=28, bottom=118, avail=h-top-bottom, k=Math.min(w*.95/(BW+.4), avail*.97/(BH+.3));
   const visH=h/k; camDist=visH/2/Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
   camY = -((bottom-top)/2)/k;
   camera.updateProjectionMatrix();
