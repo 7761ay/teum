@@ -1214,64 +1214,61 @@ if (!IR){
   }
   buildWall(); addEventListener('resize',()=>{ if (I.alive&&I.stage!=='gem') buildWall(); });
   const easeIO=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
-  // 클릭한 자리마다 생기는 '흩어짐' (열렸다가 천천히 다시 닫힘)
-  const bursts=[];
-  function burstR(bt,R){ const o=1-Math.pow(1-clamp(bt/.35,0,1),3), c=bt<2.4?1:clamp(1-(bt-2.4)/1.6,0,1); return R*o*c*c*(3-2*c); }
-  function drawWall(dt, split){
+  // 1) 글자 벽 → 클릭하면 전부 흩어짐  2) 검은 화면에서 커서(손전등)로 보석 찾기  3) 찾으면 어둠이 걷힘
+  const wHint=document.getElementById('wHint');
+  function setHint(t){ if (wHint.textContent!==t) wHint.textContent=t; }
+  function drawWall(dt){
     const {dpr,w,h,rh}=WR, x=wctx, t=I.t, S_=40, sw=w/S_, sc=Math.min(w,h)/900;
     x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,w,h);
-    for (let k=bursts.length-1;k>=0;k--){ bursts[k].t+=dt; if (bursts[k].t>4) bursts.splice(k,1); }
-    const holes=bursts.map(b=>({x:b.x,y:b.y,r:burstR(b.t,b.R),b}));
-    // 검은 막: 흩어진 자리만 뚫림
-    x.globalAlpha=1-split; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
-    x.globalCompositeOperation='destination-out';
-    for (const hh of holes){ if (hh.r<2) continue;
-      x.save(); x.translate(hh.x,hh.y); x.scale(.85,1.1);
-      const g=x.createRadialGradient(0,0,0,0,0,hh.r*1.2); g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(.55,'rgba(0,0,0,.95)'); g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g;
-      x.beginPath(); x.arc(0,0,hh.r*1.2,0,7); x.fill(); x.restore(); }
-    x.globalCompositeOperation='source-over';
-    // 마우스는 글자를 살짝 울렁이게만 함
+    // 검은 막 (어둠 단계에서는 커서 주변만 손전등처럼 밝음)
+    const dark = I.stage==='reveal' ? 1-clamp(I.rt/1.1,0,1) : 1;
+    x.globalAlpha=dark; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
+    if ((I.stage==='dark'||I.stage==='reveal') && I.lamp>1){
+      x.globalCompositeOperation='destination-out';
+      x.save(); x.translate(I.cx,I.cy); const g=x.createRadialGradient(0,0,0,0,0,I.lamp);
+      g.addColorStop(0,'rgba(0,0,0,.95)'); g.addColorStop(.45,'rgba(0,0,0,.7)'); g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g;
+      x.beginPath(); x.arc(0,0,I.lamp,0,7); x.fill(); x.restore(); x.globalCompositeOperation='source-over'; }
+    x.globalAlpha=1;
+    if (I.stage!=='text' && I.stage!=='scatter') return;
+    const k = I.stage==='scatter' ? clamp(I.st/1.3,0,1) : 0, ke=1-Math.pow(1-k,3);
     const mr=70*sc*(.4+I.spd);
     rows.forEach((r,i)=>{
       r.off=((r.off+r.dir*r.sp*dt)%r.tw+r.tw)%r.tw;
       const baseY=(i-1)*rh, fl=.78+.22*Math.sin(t*2.3+r.ph)*(Math.random()<.02?3:1);
-      x.globalAlpha=clamp(fl,0,1)*(1-split*.6);
       for (let s=0;s<S_;s++){
         const x0=s*sw, xm=x0+sw/2;
         let wy=Math.sin(xm*.005+t*1.15+i*.55)*rh*.2+Math.sin(xm*.013-t*.8+i*1.3)*rh*.07;
-        const ym=baseY+rh/2+wy; let px=0, py=0;
+        const ym=baseY+rh/2+wy; let px=0, py=0, a=clamp(fl,0,1);
         { const dx=xm-I.cx, dy=ym-I.cy, f=Math.exp(-(dx*dx+dy*dy)/(2*mr*mr)); wy+=Math.sin(t*9+s*.7)*f*rh*.25; px+=Math.sign(dx||1)*f*mr*.25; }
-        for (const hh of holes){ if (hh.r<1) continue; const dx=xm-hh.x, dy=ym-hh.y, d=Math.hypot(dx,dy)+1e-3;
-          const f=Math.exp(-Math.pow(Math.max(0,d-hh.r*.3),2)/(2*Math.pow(hh.r*.9,2)));
-          const jit=hh.b.seed[(s+i*7)%hh.b.seed.length];
-          px+=dx/d*hh.r*1.35*f*(.8+.5*jit); py+=dy/d*hh.r*.55*f*(.6+.8*jit); }
-        const sp=split>0? Math.sign(xm-w/2||1)*easeIO(clamp(split*1.15-(i%4)*.04,0,1))*w*.75 : 0;
-        x.drawImage(r.c,(x0+r.off)*dpr,0,sw*dpr+1,r.c.height,x0+px+sp,baseY+wy+py-rh*.3,sw+.7,rh*1.6);
+        if (k>0){ const dx=xm-I.ox, dy=ym-I.oy, d=Math.hypot(dx,dy)+1, j=SEED[(s*13+i*7)%SEED.length];
+          const delay=clamp(d/Math.hypot(w,h)*.6,0,.6), kk=clamp((k-delay*.5)/(1-delay*.5),0,1), e=1-Math.pow(1-kk,3);
+          px+=dx/d*e*(w*.5+j*w*.6); py+=dy/d*e*(h*.35+j*h*.5)+e*e*rh*3*(j-.3); a*=1-kk; }
+        if (a<.01) continue; x.globalAlpha=a;
+        x.drawImage(r.c,(x0+r.off)*dpr,0,sw*dpr+1,r.c.height,x0+px,baseY+wy+py-rh*.3,sw+.7,rh*1.6);
       }
     });
     x.globalAlpha=1;
-    return holes;
   }
-  const wHint=document.getElementById('wHint');
-  function openCurtain(){ if (I.stage!=='text') return; I.stage='opening'; I.ot=0; }
-  function addBurst(x,y,auto){
-    const sc=Math.min(innerWidth,innerHeight)/900, seed=[]; for (let k=0;k<23;k++) seed.push(Math.random());
-    bursts.push({x,y,t:0,R:(auto?120:210)*sc*1.4,seed,auto});
-    if (!auto && Math.hypot(x-I.sx,y-I.sy) < 210*sc*1.4*.8+I.sr*.5){ I.reveal=Math.min(1,I.reveal+.55);
-      wHint.textContent = I.reveal>=1? '' : '무언가 있어요 · 한 번 더 눌러 보세요'; }
-    if (I.reveal>=1) setTimeout(openCurtain,450);
-  }
+  const SEED=[]; for (let k=0;k<97;k++) SEED.push(Math.random());
+  function scatterAll(x,y){ if (I.stage!=='text') return; I.stage='scatter'; I.st=0; I.ox=x; I.oy=y; setHint(''); }
   function wallStep(dt){
+    const w=innerWidth, h=innerHeight, sc=Math.min(w,h)/900;
     const sp = I.lpx? Math.hypot(M.px-I.lpx[0],M.py-I.lpx[1])/Math.max(dt,1e-3) : 0; I.lpx=[M.px,M.py];
     I.spd=lerp(I.spd,Math.min(sp/1400,1),1-Math.exp(-dt*3));
-    I.cx=lerp(I.cx,M.px,1-Math.exp(-dt*7)); I.cy=lerp(I.cy,M.py,1-Math.exp(-dt*7));
-    // 아무도 없을 때: 보석과 먼 곳에서 가끔 저절로 흩어짐 (보석은 드러나지 않음)
-    I.autoT=(I.autoT||0)+dt;
-    if (I.stage==='text' && I.idle>5 && I.autoT>3.2){ I.autoT=0;
-      for (let k=0;k<8;k++){ const ax=Math.random()*innerWidth, ay=Math.random()*innerHeight; if (Math.hypot(ax-I.sx,ay-I.sy)>I.sr*2.4){ addBurst(ax,ay,true); break; } } }
-    if (I.stage==='opening'){ I.ot+=dt; const k=clamp(I.ot/1.4,0,1); drawWall(dt,k);
-      if (k>=1){ I.stage='gem'; wall.style.display='none'; intro.classList.remove('walling'); I.idle=0; } }
-    else drawWall(dt,0);
+    I.cx=lerp(I.cx,M.px,1-Math.exp(-dt*9)); I.cy=lerp(I.cy,M.py,1-Math.exp(-dt*9));
+    if (I.stage==='scatter'){ I.st+=dt; if (I.st>1.4){ I.stage='dark'; I.found=0; I.lamp=0; setHint('검은 화면에서 커서를 움직여 보세요'); } }
+    if (I.stage==='dark'){
+      const moving = I.spd>.02 || curEl.classList.contains('on');
+      I.lamp=lerp(I.lamp,(moving?175:100)*sc*(1+I.found*.6),1-Math.exp(-dt*3));
+      const onGem=Math.hypot(I.cx-I.sx,I.cy-I.sy) < I.sr*.75;
+      I.found = onGem ? Math.min(1,I.found+dt*.55) : Math.max(0,I.found-dt*.25);
+      if (I.found>.15) setHint('무언가 빛나요 · 그대로 머물러 보세요');
+      else setHint('검은 화면에서 커서를 움직여 보세요');
+      if (I.found>=1){ I.stage='reveal'; I.rt=0; setHint(''); }
+    }
+    if (I.stage==='reveal'){ I.rt+=dt; I.lamp=lerp(I.lamp,Math.hypot(w,h),1-Math.exp(-dt*2));
+      if (I.rt>1.2){ I.stage='gem'; wall.style.display='none'; intro.classList.remove('walling'); I.idle=0; } }
+    drawWall(dt);
   }
 
   function shatter(){
@@ -1298,7 +1295,7 @@ if (!IR){
 
   // 짧게 누르면 깨짐, 끌면 돌리기 (터치에서도)
   let pd=null;
-  intro.addEventListener('pointerdown',e=>{ I.idle=0; if (I.stage==='text'){ addBurst(e.clientX,e.clientY,false); return; } if (!I.broken && I.stage==='gem') pd={x:e.clientX,y:e.clientY,t:performance.now()}; });
+  intro.addEventListener('pointerdown',e=>{ I.idle=0; if (I.stage==='text'){ scatterAll(e.clientX,e.clientY); return; } if (I.stage!=='gem') return; if (!I.broken && I.stage==='gem') pd={x:e.clientX,y:e.clientY,t:performance.now()}; });
   intro.addEventListener('pointerup',e=>{
     if (I.broken||!pd) return; const moved=Math.hypot(e.clientX-pd.x,e.clientY-pd.y), quick=performance.now()-pd.t<450; pd=null;
     if (moved>12||!quick) return;
@@ -1330,7 +1327,7 @@ if (!IR){
       gemScreen();
       if (I.stage!=='gem') wallStep(dt);
       const near=I.stage==='gem' && Math.hypot(M.px-I.sx,M.py-I.sy) < I.sr*1.15 && curEl.classList.contains('on');
-      I.crack = I.stage!=='gem'? I.reveal*.5 : (near? Math.min(1,I.crack+dt*.5) : Math.max(0,I.crack-dt*.3));
+      I.crack = I.stage!=='gem'? (I.found||0)*.7 : (near? Math.min(1,I.crack+dt*.5) : Math.max(0,I.crack-dt*.3));
       placeVoxels(I.f,0);
       sparkles.forEach(sp=>{ const u=sp.userData; v3.set(u.u,u.v,.05).applyMatrix4(gem.matrixWorld); sp.position.copy(v3);
         const s=sz*u.sz*(.3+.7*Math.max(0,Math.sin(I.t*2+u.ph)))*(1+I.crack*.6)*(1-I.f*.6); sp.scale.set(s,s,1); });
