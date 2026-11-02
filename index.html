@@ -69,7 +69,7 @@
   #intro small{font:500 11px var(--mono);letter-spacing:.14em;color:rgba(216,190,255,.75);animation:blink 2.4s ease-in-out infinite}
   @keyframes blink{50%{opacity:.35}}
   #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
-  #intro.broken .i-bottom,#intro.broken .i-top{opacity:0}
+  #intro.broken .i-bottom{opacity:0}
   @media (hover:none){#intro{cursor:auto}}
   .card{max-width:520px;padding:34px 34px 28px;background:#f4f5f6;border:1px solid rgba(233,222,255,.14);border-radius:18px;box-shadow:0 20px 60px rgba(20,30,50,.12)}
   .card .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
@@ -116,7 +116,6 @@
 <div id="intro">
   <canvas id="gemGL"></canvas>
   <canvas id="glitch"></canvas>
-  <div class="i-top"><span>결정의 빈자리 — 2026</span><span>結晶 / 決定</span></div>
   <div class="i-bottom">
     <h1>틈</h1>
     <p>소란 속의 빈자리</p>
