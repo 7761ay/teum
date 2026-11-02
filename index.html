@@ -112,7 +112,7 @@
   <textarea id="txt" rows="1" maxlength="120" spellcheck="false" placeholder="지금 머릿속에 있는 말을 써 내려가 보세요"></textarea>
   <button type="button" id="clear">지우기</button>
 </form>
-<div id="hint">화면의 패널을 눌러 당겨 보세요 · 띄어쓰기도, 받침도 소리가 됩니다</div>
+<div id="hint">패널을 눌러 당겨 보세요 · 빈 곳을 끌면 판이 돌아갑니다 (더블클릭: 처음 각도)</div>
 
 <div id="intro">
   <canvas id="gemGL"></canvas>
@@ -476,8 +476,8 @@ sky.position.z=-.7; board.add(sky);
 const SIDE_MAT=new THREE.MeshStandardMaterial({color:0x6a4fc0,roughness:.32,metalness:.05,emissive:0x2a1a5e,emissiveIntensity:.6});
 const BACK_MAT=new THREE.MeshStandardMaterial({color:0x3b2a72,roughness:.5,emissive:0x1a1040,emissiveIntensity:.5});
 const SURF=[0,0,0];
-function SV(p,x,y,z){ const o=p.surf(x,y); return new THREE.Vector3(x+o[0],y+o[1],z+o[2]); }
-function SA(p,A,i,x,y,z){ const o=p.surf(x,y); A[i*3]=x+o[0]; A[i*3+1]=y+o[1]; A[i*3+2]=z+o[2]; }
+function SV(p,x,y,z){ return new THREE.Vector3(x,y,z); }
+function SA(p,A,i,x,y,z){ A[i*3]=x; A[i*3+1]=y; A[i*3+2]=z; }
 class Panel{
   constructor(key, rect, draw){
     this.key=key; this.draw=draw; this.seed=Math.random()*100;
@@ -487,7 +487,7 @@ class Panel{
     this.mat=new THREE.MeshBasicMaterial({map:this.tex, side:THREE.DoubleSide});
     this.shadow=new THREE.Mesh(new THREE.PlaneGeometry(1,1), new THREE.MeshBasicMaterial({map:shadowTex, transparent:true, opacity:0, depthWrite:false}));
     board.add(this.shadow);
-    this.bump=0; this.extras=[];
+    this.bump=0; this.extras=[]; this.xg=new THREE.Group(); this.group.add(this.xg); this.xl=new THREE.Vector3();
     this.setRect(rect);
   }
   setRect([x,y,w,h]){
@@ -541,6 +541,10 @@ class Panel{
     for (let j=0;j<p.length;j++) p[j]=b[j]+o[j];
     this.mesh.geometry.attributes.position.needsUpdate=true;
     if ((this.nt=(this.nt||0)+1)%2===0) this.mesh.geometry.computeVertexNormals();
+    // 위에 떠 있는 그래프: 가장 높이 솟은 곳보다 위로 통째로 따라 올라감
+    let mz=0, ax=0, ay=0, wsum=0;
+    for (const i of this.fmap){ if (i<0) continue; const z=o[i*3+2]; if (z>mz) mz=z; const w=Math.max(0,z)+1e-3; ax+=o[i*3]*w; ay+=o[i*3+1]*w; wsum+=w; }
+    this.xt=[ax/wsum*.6, ay/wsum*.6, mz*1.05];
     this.energy=e/this.n;
   }
 }
@@ -717,7 +721,7 @@ function roundRect(x,a,b,w,h,r){ x.beginPath(); x.moveTo(a+r,b); x.arcTo(a+w,b,a
 /* ---------- 3D extras (평면에서 솟아오르는 것들) ---------- */
 const voxMat=new THREE.MeshLambertMaterial({color:0xffffff});
 function makeRollVoxels(p){
-  const im=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),voxMat,260); im.count=0; im.frustumCulled=false; p.group.add(im);
+  const im=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),voxMat,260); im.count=0; im.frustumCulled=false; p.xg.add(im);
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color();
   return {update(d){
     let k=0; if (d<.02){ im.count=0; return; }
@@ -736,7 +740,7 @@ function lineObj(n,color,op=1){ const g=new THREE.BufferGeometry(); g.setAttribu
 const boxGeo=new THREE.BoxGeometry(1,1,1);
 const floatMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.35,metalness:.05,emissive:0x2a1a5e,emissiveIntensity:.25});
 function makeSpecTowers(p){
-  const N=26, im=new THREE.InstancedMesh(boxGeo,floatMat,N), pk=new THREE.InstancedMesh(boxGeo,floatMat,N); im.frustumCulled=pk.frustumCulled=false; p.group.add(im); p.group.add(pk);
+  const N=26, im=new THREE.InstancedMesh(boxGeo,floatMat,N), pk=new THREE.InstancedMesh(boxGeo,floatMat,N); im.frustumCulled=pk.frustumCulled=false; p.xg.add(im); p.xg.add(pk);
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color(), peaks=new Float32Array(N);
   return {update(d){
     const bw=(p.w-.2)/N, fd=S.freqData, z0=LIFT*.5+d*.1;
@@ -749,7 +753,7 @@ function makeSpecTowers(p){
   }};
 }
 function makeScopeRibbon(p){
-  const N=200, a=lineObj(N,BLUE), b2=lineObj(N,TEAL,.7), ghost=lineObj(N,0xe9deff,.25); p.group.add(a,b2,ghost);
+  const N=200, a=lineObj(N,BLUE), b2=lineObj(N,TEAL,.7), ghost=lineObj(N,0xe9deff,.25); p.xg.add(a,b2,ghost);
   return {update(d){
     const td=S.timeData, A=a.geometry.attributes.position.array, B=b2.geometry.attributes.position.array, Gh=ghost.geometry.attributes.position.array;
     for (let i=0;i<N;i++){ const v=(td[i*4]-128)/128*1.8, x=-p.w/2+i/N*p.w, y=clamp(v,-1.1,1.1)*p.h*.4;
@@ -760,8 +764,8 @@ function makeScopeRibbon(p){
   }};
 }
 function makeWave3D(p){
-  const N=70, im=new THREE.InstancedMesh(boxGeo,floatMat,N); im.frustumCulled=false; p.group.add(im);
-  const line=lineObj(N,BLUE), cur=new THREE.Mesh(boxGeo,new THREE.MeshBasicMaterial({color:BLUE})); p.group.add(line,cur);
+  const N=70, im=new THREE.InstancedMesh(boxGeo,floatMat,N); im.frustumCulled=false; p.xg.add(im);
+  const line=lineObj(N,BLUE), cur=new THREE.Mesh(boxGeo,new THREE.MeshBasicMaterial({color:BLUE})); p.xg.add(line,cur);
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color();
   return {update(d){
     const hist=S.rmsHist, x0=-p.w/2+.1, bw=(p.w-.2)/N, mid=-p.h*.1, L=line.geometry.attributes.position.array, z0=LIFT*.6+d*.1;
@@ -775,7 +779,7 @@ function makeWave3D(p){
 }
 function makeDotSpheres(p){
   const cols=5, rows=Math.round(cols*p.h/p.w), N=cols*rows;
-  const im=new THREE.InstancedMesh(new THREE.SphereGeometry(.5,14,10),voxMat,N); im.frustumCulled=false; p.group.add(im);
+  const im=new THREE.InstancedMesh(new THREE.SphereGeometry(.5,14,10),voxMat,N); im.frustumCulled=false; p.xg.add(im);
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color();
   return {update(d){
     if (d<.02){ im.visible=false; return; } im.visible=true;
@@ -787,9 +791,9 @@ function makeDotSpheres(p){
   }};
 }
 function makeOrbit3D(p){
-  const K=16, N=90, rings=[]; for (let k=0;k<K;k++){ const l=lineObj(N+1,BLUE,.75); p.group.add(l); rings.push(l); }
-  const dot=new THREE.Mesh(new THREE.SphereGeometry(1,32,20),new THREE.MeshStandardMaterial({color:0x07040d,roughness:.2,metalness:.4,emissive:0x2a1060,emissiveIntensity:.35})); p.group.add(dot);
-  const halo=new THREE.Mesh(new THREE.TorusGeometry(1,.04,8,64),new THREE.MeshBasicMaterial({color:BLUE})); p.group.add(halo);
+  const K=16, N=90, rings=[]; for (let k=0;k<K;k++){ const l=lineObj(N+1,BLUE,.75); p.xg.add(l); rings.push(l); }
+  const dot=new THREE.Mesh(new THREE.SphereGeometry(1,32,20),new THREE.MeshStandardMaterial({color:0x07040d,roughness:.2,metalness:.4,emissive:0x2a1060,emissiveIntensity:.35})); p.xg.add(dot);
+  const halo=new THREE.Mesh(new THREE.TorusGeometry(1,.04,8,64),new THREE.MeshBasicMaterial({color:BLUE})); p.xg.add(halo);
   return {update(d){
     const R=Math.min(p.w,p.h)*.3, c=S.chaos*(1-S.gapV), t=S.now, gap=S.gapV>.5;
     rings.forEach((l,k)=>{ const A=l.geometry.attributes.position.array, sd=k*1.7, z=LIFT+.05+k*.022+d*(.1+k*.03);
@@ -831,7 +835,7 @@ function resize(){
 }
 function dotsRebuild(){ // 레이아웃 변경 시 점 패널 구 재생성
   const p=P.dots; p.extras.forEach(()=>{});
-  if (p.extras.length){ p.group.children.filter(c=>c.isInstancedMesh).forEach(c=>p.group.remove(c)); p.extras=[makeDotSpheres(p)]; }
+  if (p.extras.length){ p.xg.children.filter(c=>c.isInstancedMesh).forEach(c=>p.xg.remove(c)); p.extras=[makeDotSpheres(p)]; }
 }
 addEventListener('resize',resize);
 
@@ -841,10 +845,15 @@ addEventListener('resize',resize);
 const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
 let grab=null;
 function setNDC(e){ ndc.set(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1); ray.setFromCamera(ndc,camera); }
+// 빈 곳을 끌면 판 전체를 돌려 보기 (모서리에서 옆면까지 약 95°)
+const U={yaw:0,pitch:0,yawT:0,pitchT:0}; let orbit=null;
+canvas.addEventListener('pointermove',e=>{ if (!orbit||e.pointerId!==orbit.id) return;
+  U.yawT+= (e.clientX-orbit.x)*.008; U.pitchT=clamp(U.pitchT+(e.clientY-orbit.y)*.007,-.6,1.3); orbit.x=e.clientX; orbit.y=e.clientY; });
+canvas.addEventListener('dblclick',()=>{ U.yawT=0; U.pitchT=0; });
 canvas.addEventListener('pointerdown',e=>{
   setNDC(e);
   const hits=ray.intersectObjects(Object.values(P).map(p=>p.mesh),false);
-  if (!hits.length) return;
+  if (!hits.length){ orbit={id:e.pointerId,x:e.clientX,y:e.clientY}; canvas.setPointerCapture(e.pointerId); canvas.classList.add('grabbing'); return; }
   const h=hits[0], p=h.object.userData.panel;
   const local=p.mesh.worldToLocal(h.point.clone());
   const plane=new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(),h.point);
@@ -873,6 +882,7 @@ canvas.addEventListener('pointermove',e=>{
   squishUpdate(grab.delta.length()/2.2);
 });
 function release(e){
+  if (orbit&&(!e||e.pointerId===orbit.id)){ orbit=null; canvas.classList.remove('grabbing'); return; }
   if (!grab||(e&&e.pointerId!==grab.id)) return;
   const s=grab.delta.length()/2.2; squishEnd(s);
   grab.panel.poke(.5,.5,s*1.5,1); grab.panel.energy=1;
@@ -972,14 +982,15 @@ function loop(now){
   const d=S.depth, g=S.gapV, t=S.now;
 
   // board pose: 평면(2D) → 눕혀진 아이소메트릭(3D)
-  board.rotation.x = -d*.78 - M.y*.1;
+  U.yaw=lerp(U.yaw,U.yawT,1-Math.exp(-dt*6)); U.pitch=lerp(U.pitch,U.pitchT,1-Math.exp(-dt*6));
+  board.rotation.x = Math.max(-1.66, -d*.78 - M.y*.1 - U.pitch);
   M.x=lerp(M.x,M.tx,1-Math.exp(-dt*4)); M.y=lerp(M.y,M.ty,1-Math.exp(-dt*4));
   M.cx=lerp(M.cx,M.px,1-Math.exp(-dt*18)); M.cy=lerp(M.cy,M.py,1-Math.exp(-dt*18));
   curEl.style.transform=`translate(${M.cx}px,${M.cy}px)`; curEl.classList.toggle('grab',!!grab);
   board.rotation.y = M.x*.13;
-  board.rotation.z = d*(layoutKey==='wide'? .34+.06*Math.sin(t*.12) : .12+.04*Math.sin(t*.12));
+  board.rotation.z = d*(layoutKey==='wide'? .34+.06*Math.sin(t*.12) : .12+.04*Math.sin(t*.12)) + U.yaw;
   board.position.y = 0;
-  camera.position.set(Math.sin(t*.07)*d*.8, camY - d*1.0, camDist*(1+d*.1));
+  const oz=1+Math.min(.45,Math.abs(U.pitch)*.06+Math.abs(Math.sin(U.yaw))*.12); camera.position.set(Math.sin(t*.07)*d*.8, camY - d*1.0, camDist*(1+d*.1)*oz);
   camera.lookAt(0, camY + d*.35, 0);
   sky.material.opacity = .32 + .68*g;
 
@@ -997,6 +1008,9 @@ function loop(now){
     const zz=z+p.hover*.4; p.shadow.position.set(p.cx+gx+mx*.4+zz*.22-M.x*zz*.12, p.cy+gy+my*.4-zz*.3-M.y*zz*.1, -.66);
     p.shadow.material.opacity = Math.max(d*.5*clamp(1-z*.25,.3,1), p.hover*.35);
     p.simulate(dt,grab);
+    { const xt=p.xt||[0,0,0]; p.xv=p.xv||new THREE.Vector3();   // 젤리처럼 살짝 늦게 따라오기
+      p.xv.x+=(110*(xt[0]-p.xl.x)-9*p.xv.x)*dt; p.xv.y+=(110*(xt[1]-p.xl.y)-9*p.xv.y)*dt; p.xv.z+=(110*(xt[2]-p.xl.z)-9*p.xv.z)*dt;
+      p.xl.addScaledVector(p.xv,dt); p.xg.position.copy(p.xl); }
     p.draw(p.ctx,p.canvas.width,p.canvas.height); p.tex.needsUpdate=true;
     p.extras.forEach(e=>e.update(d));
   }
