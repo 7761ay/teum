@@ -1393,30 +1393,45 @@ if (!IR){
   let BR=null;
   window.__setBR=t=>{ if (BR) BR.t=t; };
   function breakRose(cx,cy){ if (I.stage!=='rose') return; BR={t:0,cx,cy}; I.stage='break'; I.pan=[0,0]; wall.style.display='none'; setHint(''); }
+  // 장미 꽃송이(넓은 배경 안 위치)를 기준점으로 그리기
+  const HEAD=[.5,.31];
+  function roseAt(x,img,w,h,sc,hx,hy){ const ir=img.width/img.height, dh=h*sc, dw=dh*ir; x.drawImage(img,hx-HEAD[0]*dw,hy-HEAD[1]*dh,dw,dh); }
   function drawBreak(dt){
     const w=innerWidth, h=innerHeight, x=fctx, dpr=FM.dpr, T=(BR.t+=dt); x.setTransform(dpr,0,0,dpr,0,0);
-    const sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, eo=v=>1-Math.pow(1-clamp(v,0,1),3), px=-I.mx*w*.02, py=I.my*h*.02;
-    const CUT=1.32;
-    if (T<CUT){ // 1) 장미가 초점을 잃고 어두워짐
-      const k=sm(T/CUT), sc=lerp(1.05+5*.012, BG_SC, k);
-      x.globalAlpha=1; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
-      x.globalAlpha=1-k; coverDraw(x,FM.wide,w,h,sc,px,py,'cover');
-      x.globalAlpha=k; coverDraw(x,FM.wideBlur,w,h,sc,lerp(px,-I.mx*w*.032,k),lerp(py,I.my*h*.032,k),'cover');
-      x.globalAlpha=1; x.fillStyle=`rgba(8,4,16,${.12+k*.5})`; x.fillRect(0,0,w,h);
-      I.rectA=lerp(I.rectA||0,0,1-Math.exp(-dt*6)); drawRects(x,dt,w,h,I.rectA);
-    } else bgDraw(x,w,h);   // 이후엔 보석 장면과 똑같은 흐린 장미 배경
-    // 2) 하드컷: 선명한 스캔라인 보석이 아래에서 위로 빠르게 올라옴 → 3) 진짜 보석으로
-    if (T>=CUT){
-      const side=(I.sr||200)/.4, fx=I.sx+.08*side-side/2, fy=I.sy-side/2, u=eo((T-CUT)/.35);
-      const gy=lerp(h+side*.05, fy, u)+(1-u)*side*.1, gs=side*lerp(1.12,1,u);
-      x.globalAlpha=1-sm((T-CUT-.55)/.45); x.globalCompositeOperation='lighter';
-      x.drawImage(FM.scan,fx-(gs-side)/2+((Math.random()<.15&&u<1)?(Math.random()-.5)*8:0),gy,gs,gs);
-      x.globalCompositeOperation='source-over'; x.globalAlpha=1;
+    const sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, eio=v=>{ v=clamp(v,0,1); return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2; };
+    const side=(I.sr||200)/.4, P=[I.sx, I.sy];                      // 보석이 자리 잡을 곳
+    const sc0=1.05+5*.012, px=-I.mx*w*.02, py=I.my*h*.02;
+    const head0=[w/2+px, h/2+(HEAD[1]-.5)*h*sc0+py];               // 지금 장미 꽃송이의 화면 위치
+    // 1) 초점이 나가며 (0~1.3초)  2) 장미가 뒤로 물러나며 꽃송이가 보석 자리로 모이고, 둥글게 닫힘 (0.4~2.1초)
+    const blur=sm(T/1.3), back=eio((T-.4)/1.7);
+    const sc=lerp(sc0, sc0*.42, back), hx=lerp(head0[0],P[0],back), hy=lerp(head0[1],P[1],back);
+    bgDraw(x,w,h);
+    const fade=1-sm((T-1.7)/.6), ir=FM.wide.width/FM.wide.height, dh=h*sc, dw=dh*ir;
+    const edge=Math.min(hy-(hy-HEAD[1]*dh), (hy-HEAD[1]*dh+dh)-hy, dw*.5);          // 사진 가장자리까지 거리
+    const R0=Math.hypot(w,h), close=eio((T-.5)/1.6), rad=Math.min(lerp(R0,side*.45,close), edge*(close>0? .98 : 9));
+    // 물러나는 장미 층 (가장자리를 부드럽게 녹인 원 안에만)
+    if (!FM.lay){ FM.lay=document.createElement('canvas'); }
+    const L=FM.lay; if (L.width!==film.width||L.height!==film.height){ L.width=film.width; L.height=film.height; }
+    const lx=L.getContext('2d'); lx.setTransform(dpr,0,0,dpr,0,0); lx.globalCompositeOperation='source-over'; lx.clearRect(0,0,w,h);
+    lx.globalAlpha=1-blur; roseAt(lx,FM.wide,w,h,sc,hx,hy); lx.globalAlpha=blur; roseAt(lx,FM.wideBlur,w,h,sc,hx,hy);
+    lx.globalAlpha=1; lx.fillStyle=`rgba(8,4,16,${.12+blur*.45})`; lx.fillRect(0,0,w,h);
+    if (close>0){ lx.globalCompositeOperation='destination-in'; const g=lx.createRadialGradient(hx,hy,rad*.55,hx,hy,rad); g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)'); lx.fillStyle=g; lx.fillRect(0,0,w,h); lx.globalCompositeOperation='source-over'; }
+    x.save(); x.setTransform(1,0,0,1,0,0); x.globalAlpha=fade; x.drawImage(L,0,0); x.restore(); x.globalAlpha=1;
+    if (close>0){ const g=x.createRadialGradient(hx,hy,rad*.75,hx,hy,rad*1.05); g.addColorStop(0,'rgba(5,3,8,0)'); g.addColorStop(.7,`rgba(190,160,255,${.14*fade*close})`); g.addColorStop(1,'rgba(5,3,8,0)');
+      x.fillStyle=g; x.beginPath(); x.arc(hx,hy,rad*1.05,0,7); x.fill(); }
+    I.rectA=lerp(I.rectA||0,0,1-Math.exp(-dt*6)); drawRects(x,dt,w,h,I.rectA);
+    // 3) 보석: 아래에서 장미 자리로 천천히 옮겨 감 (1.0~2.1초), 도착하면 진짜 보석으로
+    const mv=eio((T-1.0)/1.1);
+    if (T>1.0){
+      const cx=lerp(P[0]+w*.04, P[0], mv), cy=lerp(h+side*.55, P[1], mv), gs=side*lerp(.8,1,mv);
+      const fx=cx+.08*gs-gs/2, fy=cy-gs/2;
+      x.globalAlpha=clamp((T-1.0)*4,0,1)*(1-sm((T-2.05)/.5)); x.globalCompositeOperation='lighter';
+      x.drawImage(FM.scan,fx,fy,gs,gs); x.globalCompositeOperation='source-over'; x.globalAlpha=1;
     }
     x.globalAlpha=.9; x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
     x.fillStyle='rgba(255,255,255,.05)'; for (let k=0;k<50;k++) x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5);
-    film.style.opacity=String(1-sm((T-CUT-.5)/.5));
-    if (T>CUT+1.05){ I.stage='gem'; film.style.display='none'; film.style.opacity='1'; intro.classList.remove('walling'); I.idle=0; BR=null; }
+    film.style.opacity=String(1-sm((T-2.05)/.55));
+    if (T>2.65){ I.stage='gem'; film.style.display='none'; film.style.opacity='1'; intro.classList.remove('walling'); I.idle=0; BR=null; }
   }
 
   // 깨진 유리처럼: 금이 퍼지고 → 뾰족한 검은 조각들이 떨어져 나가며 본편이 드러남
