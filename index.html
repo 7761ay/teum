@@ -475,6 +475,9 @@ sky.position.z=-.7; board.add(sky);
 
 const SIDE_MAT=new THREE.MeshStandardMaterial({color:0x6a4fc0,roughness:.32,metalness:.05,emissive:0x2a1a5e,emissiveIntensity:.6});
 const BACK_MAT=new THREE.MeshStandardMaterial({color:0x3b2a72,roughness:.5,emissive:0x1a1040,emissiveIntensity:.5});
+const SURF=[0,0,0];
+function SV(p,x,y,z){ const o=p.surf(x,y); return new THREE.Vector3(x+o[0],y+o[1],z+o[2]); }
+function SA(p,A,i,x,y,z){ const o=p.surf(x,y); A[i*3]=x+o[0]; A[i*3+1]=y+o[1]; A[i*3+2]=z+o[2]; }
 class Panel{
   constructor(key, rect, draw){
     this.key=key; this.draw=draw; this.seed=Math.random()*100;
@@ -498,11 +501,19 @@ class Panel{
     geo.translate(0,0,-D/2);
     this.base=geo.attributes.position.array.slice();
     this.n=this.base.length/3; this.off=new Float32Array(this.n*3); this.vel=new Float32Array(this.n*3);
+    // 앞면 격자 → 정점 번호 (위에 떠 있는 그래프가 늘어나는 표면을 따라가도록)
+    this.sx=sx; this.sy=sy; this.fmap=new Int32Array((sx+1)*(sy+1)).fill(-1);
+    { const nz=geo.attributes.normal.array, b=this.base;
+      for (let i=0;i<this.n;i++){ if (nz[i*3+2]<.9) continue; const ix=Math.round((b[i*3]+this.w/2)/this.w*sx), iy=Math.round((b[i*3+1]+this.h/2)/this.h*sy); const k=iy*(sx+1)+ix; if (this.fmap[k]<0) this.fmap[k]=i; } }
     geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),Math.hypot(this.w,this.h)*1.5);
     this.mesh=new THREE.Mesh(geo,[SIDE_MAT,SIDE_MAT,SIDE_MAT,SIDE_MAT,this.mat,BACK_MAT]); this.mesh.userData.panel=this; this.group.add(this.mesh);
     this.energy=1; this.tex.needsUpdate=true;
     this.shadow.scale.set(this.w*1.5,this.h*1.5,1);
     this.extras.forEach(e=>e.layout && e.layout(this));
+  }
+  surf(x,y){ // 앞면의 (x,y) 지점이 지금 얼마나 움직였는지
+    const ix=clamp(Math.round((x+this.w/2)/this.w*this.sx),0,this.sx), iy=clamp(Math.round((y+this.h/2)/this.h*this.sy),0,this.sy), i=this.fmap[iy*(this.sx+1)+ix];
+    if (i<0) { SURF[0]=SURF[1]=SURF[2]=0; return SURF; } SURF[0]=this.off[i*3]; SURF[1]=this.off[i*3+1]; SURF[2]=this.off[i*3+2]; return SURF;
   }
   poke(u,v,amt,sig=.35){ // u,v: 0..1 (canvas 좌표), z 속도 충격
     const lx=(u-.5)*this.w, ly=(.5-v)*this.h, b=this.base;
@@ -713,13 +724,13 @@ function makeRollVoxels(p){
     const lw=.62, lo=36, hi=84, rh=p.h/(hi-lo), pps=(p.w-lw)/6.5, px=-p.w/2+lw+(p.w-lw)*.33, now=S.now;
     const add=(n,t,dur,a)=>{ if (k>=260||n.rest||n.noise) return; const xx=px+(t-now)*pps, ww=Math.max(.05,dur*pps*.9); if (xx<-p.w/2+lw||xx+ww>p.w/2) return;
       const y=-p.h/2+(clamp(n.midi,lo,hi-1)-lo+.5)*rh, hgt=d*(.08+(a>.5?.35:.1))*(1+Math.sin(n.midi)*.3);
-      m.compose(new THREE.Vector3(xx+ww/2,y,hgt/2+.01),q,new THREE.Vector3(ww,rh*.75,hgt)); im.setMatrixAt(k,m); col.set(trackColor(n)); if (a<.5) col.lerp(new THREE.Color(0xffffff),.55); im.setColorAt(k,col); k++; };
+      m.compose(SV(p,xx+ww/2,y,hgt/2+.03),q,new THREE.Vector3(ww,rh*.75,hgt)); im.setMatrixAt(k,m); col.set(trackColor(n)); if (a<.5) col.lerp(new THREE.Color(0xffffff),.55); im.setColorAt(k,col); k++; };
     for (const e of S.notes) add(e.n,e.t,e.dur,1);
     if (!S.gapActive) for (const u of upcoming(18)) add(u.n,u.t,STEP,.3);
     im.count=k; im.instanceMatrix.needsUpdate=true; if (im.instanceColor) im.instanceColor.needsUpdate=true;
   }};
 }
-const LIFT=.16;   // 블록 앞면에서 떠 있는 높이
+const LIFT=.32;   // 블록 앞면에서 떠 있는 높이
 function lineObj(n,color,op=1){ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*3),3));
   const l=new THREE.Line(g,new THREE.LineBasicMaterial({color,transparent:op<1,opacity:op})); l.frustumCulled=false; return l; }
 const boxGeo=new THREE.BoxGeometry(1,1,1);
@@ -731,9 +742,9 @@ function makeSpecTowers(p){
     const bw=(p.w-.2)/N, fd=S.freqData, z0=LIFT*.5+d*.1;
     for (let i=0;i<N;i++){ const b=Math.floor(Math.pow(i/N,2)*300)+2, v=(fd[b]+fd[b+1])/510; peaks[i]=Math.max(v,peaks[i]-.004);
       const hh=Math.max(.03,v*p.h*.66), x=-p.w/2+.1+i*bw+bw*.31, y=-p.h/2+.06+hh/2, dz=.06+v*(.25+d*.6);
-      m.compose(new THREE.Vector3(x,y,z0+dz/2),q,new THREE.Vector3(bw*.6,hh,dz)); im.setMatrixAt(i,m);
+      m.compose(SV(p,x,y,z0+dz/2),q,new THREE.Vector3(bw*.6,hh,dz)); im.setMatrixAt(i,m);
       col.set(i%5===0?BLUE:(i%3===0?'#c4b5fd':'#ede9fe')); im.setColorAt(i,col);
-      m.compose(new THREE.Vector3(x,-p.h/2+.06+peaks[i]*p.h*.66+.05,z0+.06+peaks[i]*.3),q,new THREE.Vector3(bw*.6,.018,.04)); pk.setMatrixAt(i,m); col.set(BLUE); pk.setColorAt(i,col); }
+      m.compose(SV(p,x,-p.h/2+.06+peaks[i]*p.h*.66+.05,z0+.1+peaks[i]*.3),q,new THREE.Vector3(bw*.6,.018,.04)); pk.setMatrixAt(i,m); col.set(BLUE); pk.setColorAt(i,col); }
     im.instanceMatrix.needsUpdate=pk.instanceMatrix.needsUpdate=true; im.instanceColor.needsUpdate=pk.instanceColor.needsUpdate=true;
   }};
 }
@@ -742,9 +753,9 @@ function makeScopeRibbon(p){
   return {update(d){
     const td=S.timeData, A=a.geometry.attributes.position.array, B=b2.geometry.attributes.position.array, Gh=ghost.geometry.attributes.position.array;
     for (let i=0;i<N;i++){ const v=(td[i*4]-128)/128*1.8, x=-p.w/2+i/N*p.w, y=clamp(v,-1.1,1.1)*p.h*.4;
-      Gh[i*3]=x; Gh[i*3+1]=A[i*3+1]||0; Gh[i*3+2]=LIFT*.4;
-      A[i*3]=x; A[i*3+1]=y; A[i*3+2]=LIFT+d*.3+Math.sin(i*.05+S.now*2)*.04*S.chaos;
-      B[i*3]=x; B[i*3+1]=y*.7-.04; B[i*3+2]=LIFT*1.9+d*.45; }
+      SA(p,Gh,i,x,y*.95,LIFT*.45);
+      SA(p,A,i,x,y,LIFT+d*.3+Math.sin(i*.05+S.now*2)*.04*S.chaos);
+      SA(p,B,i,x,y*.7-.04,LIFT*1.7+d*.45); }
     [a,b2,ghost].forEach(l=>l.geometry.attributes.position.needsUpdate=true);
   }};
 }
@@ -755,11 +766,11 @@ function makeWave3D(p){
   return {update(d){
     const hist=S.rmsHist, x0=-p.w/2+.1, bw=(p.w-.2)/N, mid=-p.h*.1, L=line.geometry.attributes.position.array, z0=LIFT*.6+d*.1;
     for (let i=0;i<N;i++){ const v=hist[(S.rmsPtr-N+i+hist.length)%hist.length], hh=clamp(v*4,0,1)*p.h*.32+.01, x=x0+i*bw;
-      m.compose(new THREE.Vector3(x,mid,z0),q,new THREE.Vector3(bw*.55,hh*2,.05+v*.6*(.4+d))); im.setMatrixAt(i,m);
+      m.compose(SV(p,x,mid,z0),q,new THREE.Vector3(bw*.55,hh*2,.05+v*.6*(.4+d))); im.setMatrixAt(i,m);
       col.set(i<N*.33?'#ede9fe':'#8f7cc4'); im.setColorAt(i,col);
-      L[i*3]=x; L[i*3+1]=mid+clamp(v*5,0,1)*p.h*.3; L[i*3+2]=LIFT*1.8+d*.3; }
+      SA(p,L,i,x,mid+clamp(v*5,0,1)*p.h*.3,LIFT*1.6+d*.3); }
     im.instanceMatrix.needsUpdate=true; im.instanceColor.needsUpdate=true; line.geometry.attributes.position.needsUpdate=true;
-    cur.position.set(x0+N*.33*bw,0,LIFT*1.2); cur.scale.set(.012,p.h*.85,.012);
+    cur.position.copy(SV(p,x0+N*.33*bw,0,LIFT*1.2)); cur.scale.set(.012,p.h*.85,.012);
   }};
 }
 function makeDotSpheres(p){
@@ -771,7 +782,7 @@ function makeDotSpheres(p){
     const cw=p.w/cols, chh=p.h/rows, fd=S.freqData, sh=S.now*(.3+S.chaos*1.2); let k=0;
     for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){ const kk=(c*7+r*3+Math.floor(sh))%60, v=S.gapActive?.3:fd[4+kk*3]/255*(.7+S.chaos*.6);
       const R=Math.min(cw,chh)*.42*(v>.62?1:0), x=-p.w/2+c*cw+cw/2, y=p.h/2-(((r+(sh%1))%rows)*chh+chh/2);
-      m.compose(new THREE.Vector3(x,y,d*(.05+v*.7)),q,new THREE.Vector3(R*2,R*2,R*2)); im.setMatrixAt(k,m); col.set(r/rows<.5?TEAL:BLUE); im.setColorAt(k,col); k++; }
+      m.compose(SV(p,x,y,.06+d*(.05+v*.7)),q,new THREE.Vector3(R*2,R*2,R*2)); im.setMatrixAt(k,m); col.set(r/rows<.5?TEAL:BLUE); im.setColorAt(k,col); k++; }
     im.instanceMatrix.needsUpdate=true; im.instanceColor.needsUpdate=true;
   }};
 }
@@ -785,9 +796,9 @@ function makeOrbit3D(p){
       for (let i=0;i<=N;i++){ const a=i/N*Math.PI*2*1.15+sd;
         const wob=Math.sin(a*3+t*(.6+k*.05)+sd)*.35+Math.sin(a*5-t*.9+sd*2)*.25*c+Math.sin(a*2+t*.3)*.2;
         const rr=lerp(R*(.32+k*.035), R*(.75+wob*(.4+c*.9)), 1-S.gapV);
-        A[i*3]=Math.cos(a)*rr+Math.sin(t*.7+k)*R*.12*c; A[i*3+1]=-Math.sin(a)*rr*(.85+.15*Math.sin(k)); A[i*3+2]=z+Math.sin(a*2+t+k)*.02*c; }
+        SA(p,A,i,Math.cos(a)*rr+Math.sin(t*.7+k)*R*.12*c, -Math.sin(a)*rr*(.85+.15*Math.sin(k)), z+Math.sin(a*2+t+k)*.02*c); }
       l.geometry.attributes.position.needsUpdate=true; l.material.color.set(gap?AMBER:(k%2?BLUE:'#a78bfa')); });
-    const r=R*(.17+S.rms*.9); dot.scale.setScalar(r); dot.position.set(0,0,LIFT+.25+d*.35);
+    const r=R*(.17+S.rms*.9); dot.scale.setScalar(r); dot.position.copy(SV(p,0,0,LIFT+.3+d*.35));
     halo.scale.setScalar(r*1.05); halo.position.copy(dot.position);
   }};
 }
