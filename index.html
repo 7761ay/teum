@@ -4,13 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>틈 — 소란 속의 빈자리</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
+  /* 깍두기 도면체 (Kkakdugi Drafting) · SIL OFL 1.1 · fonts/OFL.txt */
+  @font-face{font-family:"Kkakdugi Drafting";src:url("fonts/KkakdugiDrafting-Light.woff2") format("woff2");font-weight:100 350;font-display:swap}
+  @font-face{font-family:"Kkakdugi Drafting";src:url("fonts/KkakdugiDrafting-Regular.woff2") format("woff2");font-weight:351 550;font-display:swap}
+  @font-face{font-family:"Kkakdugi Drafting";src:url("fonts/KkakdugiDrafting-Bold.woff2") format("woff2");font-weight:551 900;font-display:swap}
   :root{
     --bg:#0b0812; --ink:#f1eaff; --mute:#9b8cb8; --blue:#8b5cf6; --teal:#e879f9; --amber:#8be3ff;
-    --mono:"IBM Plex Mono", ui-monospace, monospace; --sans:"IBM Plex Sans KR", system-ui, sans-serif;
+    --mono:"Kkakdugi Drafting", ui-monospace, monospace; --sans:"Kkakdugi Drafting", system-ui, sans-serif;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
@@ -442,8 +443,8 @@ const sun=new THREE.DirectionalLight(0xffffff,1.6); sun.position.set(3,6,8); sce
 
 const PPU = Math.round(118*Math.min(1.6,Math.max(1,devicePixelRatio)));
 const INK='#f1eaff', MUTE='#9b8cb8', BLUE='#8b5cf6', TEAL='#e879f9', AMBER='#8be3ff', PAPER='#151020', LINE='rgba(233,222,255,.14)';
-const mono=(px,w=500)=>`${w} ${px}px "IBM Plex Mono", ui-monospace, monospace`;
-const sans=(px,w=400)=>`${w} ${px}px "IBM Plex Sans KR", system-ui, sans-serif`;
+const mono=(px,w=400)=>`${w} ${px}px "Kkakdugi Drafting", ui-monospace, monospace`;
+const sans=(px,w=400)=>`${w} ${px}px "Kkakdugi Drafting", system-ui, sans-serif`;
 
 const LAYOUTS={
   wide:{W:12,H:8,r:{dots:[0,0,2,3],bars:[2,0,2,3],text:[4,0,4,3],radial:[8,0,4,3],roll:[0,3,8,2],lane:[8,3,4,3],wave:[0,5,3,1],scope:[0,6,3,1],spec:[0,7,3,1],orbit:[3,5,3,3],glyph:[6,5,2,3],keys:[8,6,4,2]}},
@@ -1202,7 +1203,8 @@ if (!IR){
   window.__shatter=shatter; window.__I=I;
 }
 window.__S=S; window.__P=P; window.__setText=(v)=>{ txt.value=v; txt.dispatchEvent(new Event('input')); };
-(document.fonts? document.fonts.ready : Promise.resolve()).then(()=>{ resize(); requestAnimationFrame(loop); });
+const fontsReady = document.fonts ? Promise.all(['300','400','700'].map(w=>document.fonts.load(`${w} 16px "Kkakdugi Drafting"`,'가A'))).catch(()=>{}) : Promise.resolve();
+fontsReady.then(()=>{ resize(); requestAnimationFrame(loop); });
 resize();
 </script>
 </body>
