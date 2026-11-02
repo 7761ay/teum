@@ -473,6 +473,8 @@ const skyTex=new THREE.CanvasTexture(skyCanvas); skyTex.colorSpace=THREE.SRGBCol
 const sky=new THREE.Mesh(new THREE.PlaneGeometry(1,1), new THREE.MeshBasicMaterial({map:skyTex, transparent:true, opacity:.2, depthWrite:false}));
 sky.position.z=-.7; board.add(sky);
 
+const SIDE_MAT=new THREE.MeshStandardMaterial({color:0x6a4fc0,roughness:.32,metalness:.05,emissive:0x2a1a5e,emissiveIntensity:.6});
+const BACK_MAT=new THREE.MeshStandardMaterial({color:0x3b2a72,roughness:.5,emissive:0x1a1040,emissiveIntensity:.5});
 class Panel{
   constructor(key, rect, draw){
     this.key=key; this.draw=draw; this.seed=Math.random()*100;
@@ -490,11 +492,14 @@ class Panel{
     this.canvas.width=Math.round(this.w*PPU); this.canvas.height=Math.round(this.h*PPU);
     if (this.mesh){ this.group.remove(this.mesh); this.mesh.geometry.dispose(); }
     const sx=Math.max(6,Math.round(this.w*9)), sy=Math.max(6,Math.round(this.h*9));
-    const geo=new THREE.PlaneGeometry(this.w,this.h,sx,sy);
+    // 두께가 있는 젤리 블록 (앞면 = 그래프, 옆·뒷면 = 보라 젤리)
+    const D=this.D=clamp(.12*Math.min(this.w,this.h)+.16,.22,.42);
+    const geo=new THREE.BoxGeometry(this.w,this.h,D,sx,sy,4);
+    geo.translate(0,0,-D/2);
     this.base=geo.attributes.position.array.slice();
     this.n=this.base.length/3; this.off=new Float32Array(this.n*3); this.vel=new Float32Array(this.n*3);
     geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),Math.hypot(this.w,this.h)*1.5);
-    this.mesh=new THREE.Mesh(geo,this.mat); this.mesh.userData.panel=this; this.group.add(this.mesh);
+    this.mesh=new THREE.Mesh(geo,[SIDE_MAT,SIDE_MAT,SIDE_MAT,SIDE_MAT,this.mat,BACK_MAT]); this.mesh.userData.panel=this; this.group.add(this.mesh);
     this.energy=1; this.tex.needsUpdate=true;
     this.shadow.scale.set(this.w*1.5,this.h*1.5,1);
     this.extras.forEach(e=>e.layout && e.layout(this));
@@ -509,15 +514,22 @@ class Panel{
     if (!mine && this.energy<1e-4) return;
     const K=170, C=7.5, b=this.base, o=this.off, v=this.vel; let e=0;
     let gx=0,gy=0,dx=0,dy=0,dz=0,sig=.55;
-    if (mine){ gx=grab.local.x; gy=grab.local.y; dx=grab.delta.x; dy=grab.delta.y; const s=Math.hypot(dx,dy); dz=-.16+s*.55; sig=.45+s*.35; }
+    const D=this.D, press=mine? .22*clamp(1-Math.hypot(grab.delta.x,grab.delta.y)*2,0,1) : 0;
+    if (mine){ gx=grab.local.x; gy=grab.local.y; dx=grab.delta.x; dy=grab.delta.y; const s=Math.hypot(dx,dy); dz=-press*1.1+s*.6; sig=.45+s*.35; }
     for (let i=0;i<this.n;i++){
       let tx=0,ty=0,tz=0;
-      if (mine){ const ax=b[i*3]-gx, ay=b[i*3+1]-gy, w=Math.exp(-(ax*ax+ay*ay)/(2*sig*sig)); tx=w*dx; ty=w*dy; tz=w*dz; }
+      if (mine){ const ax=b[i*3]-gx, ay=b[i*3+1]-gy, w=Math.exp(-(ax*ax+ay*ay)/(2*sig*sig)), front=(b[i*3+2]+D)/D;
+        // 당기면: 앞면은 따라오고 뒷면은 늦게 → 블록이 늘어남
+        tx=w*dx*(.55+.45*front); ty=w*dy*(.55+.45*front); tz=w*dz*(.25+.75*front);
+        // 누르면: 눌린 자리가 꺼지고 둘레가 옆으로 불룩 → 말랑한 촉감
+        if (press>0){ const r=Math.hypot(ax,ay)+1e-3, ring=Math.exp(-Math.pow(r-sig*1.2,2)/(2*sig*sig*.5));
+          tx+=ax/r*ring*press*.35; ty+=ay/r*ring*press*.35; tz+=ring*press*.45*front; } }
       for (let k=0;k<3;k++){ const j=i*3+k, tgt=k===0?tx:k===1?ty:tz; v[j]+=(K*(tgt-o[j])-C*v[j])*dt; o[j]+=v[j]*dt; e+=Math.abs(v[j])+Math.abs(o[j]-tgt); }
     }
     const p=this.mesh.geometry.attributes.position.array;
     for (let j=0;j<p.length;j++) p[j]=b[j]+o[j];
     this.mesh.geometry.attributes.position.needsUpdate=true;
+    if ((this.nt=(this.nt||0)+1)%2===0) this.mesh.geometry.computeVertexNormals();
     this.energy=e/this.n;
   }
 }
@@ -937,7 +949,7 @@ function loop(now){
   S.chaosT = clamp(base+S.typing*.45+S.squish*.4,0,1);
   S.chaos = lerp(S.chaos, S.gapActive?0:S.chaosT, 1-Math.exp(-dt*(S.gapActive?3:1.5)));
   S.gapV = lerp(S.gapV, S.gapActive?1:0, 1-Math.exp(-dt*(S.gapActive?2.2:1.4)));
-  const dT = S.gapActive? 0 : (S.seq.length? .45+.5*S.chaos : .05+S.squish*.5);
+  const dT = S.gapActive? .12 : (S.seq.length? .5+.45*S.chaos : .24+S.squish*.4);
   S.depth = lerp(S.depth, dT, 1-Math.exp(-dt*(S.gapActive?3.5:1.8)));
   if (window.__forceDepth!=null) S.depth=window.__forceDepth;
   const d=S.depth, g=S.gapV, t=S.now;
