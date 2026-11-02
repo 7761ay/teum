@@ -692,7 +692,7 @@ const draws={
     x.fillStyle='#1d1631'; x.fillRect(0,0,W,H);
     const g=x.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.6); g.addColorStop(0,'rgba(139,92,246,.22)'); g.addColorStop(1,'rgba(139,92,246,0)'); x.fillStyle=g; x.fillRect(0,0,W,H);
     // 떠 있는 고리의 그림자
-    const R=Math.min(W,H)*.3; x.strokeStyle='rgba(5,3,10,.25)'; x.lineWidth=R*.25; x.beginPath(); x.arc(W/2+R*.12,H/2+R*.12,R*.6,0,7); x.stroke();
+    const R=Math.min(W,H)*.3; x.save(); x.filter='blur('+Math.round(R*.08)+'px)'; x.strokeStyle='rgba(5,3,10,.3)'; x.lineWidth=R*.3; x.beginPath(); x.arc(W/2+R*.25,H/2+R*.25,R*.6,0,7); x.stroke(); x.restore();
     x.strokeStyle='rgba(233,222,255,.28)'; x.lineWidth=2; x.strokeRect(1,1,W-2,H-2);
   },
   glyph(x,W,H){
@@ -724,13 +724,13 @@ function makeRollVoxels(p){
     const lw=.62, lo=36, hi=84, rh=p.h/(hi-lo), pps=(p.w-lw)/6.5, px=-p.w/2+lw+(p.w-lw)*.33, now=S.now;
     const add=(n,t,dur,a)=>{ if (k>=260||n.rest||n.noise) return; const xx=px+(t-now)*pps, ww=Math.max(.05,dur*pps*.9); if (xx<-p.w/2+lw||xx+ww>p.w/2) return;
       const y=-p.h/2+(clamp(n.midi,lo,hi-1)-lo+.5)*rh, hgt=d*(.08+(a>.5?.35:.1))*(1+Math.sin(n.midi)*.3);
-      m.compose(SV(p,xx+ww/2,y,hgt/2+.03),q,new THREE.Vector3(ww,rh*.75,hgt)); im.setMatrixAt(k,m); col.set(trackColor(n)); if (a<.5) col.lerp(new THREE.Color(0xffffff),.55); im.setColorAt(k,col); k++; };
+      m.compose(SV(p,xx+ww/2,y,hgt/2+LIFT*.5),q,new THREE.Vector3(ww,rh*.75,hgt)); im.setMatrixAt(k,m); col.set(trackColor(n)); if (a<.5) col.lerp(new THREE.Color(0xffffff),.55); im.setColorAt(k,col); k++; };
     for (const e of S.notes) add(e.n,e.t,e.dur,1);
     if (!S.gapActive) for (const u of upcoming(18)) add(u.n,u.t,STEP,.3);
     im.count=k; im.instanceMatrix.needsUpdate=true; if (im.instanceColor) im.instanceColor.needsUpdate=true;
   }};
 }
-const LIFT=.32;   // 블록 앞면에서 떠 있는 높이
+const LIFT=.6;   // 블록 앞면에서 떠 있는 높이
 function lineObj(n,color,op=1){ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*3),3));
   const l=new THREE.Line(g,new THREE.LineBasicMaterial({color,transparent:op<1,opacity:op})); l.frustumCulled=false; return l; }
 const boxGeo=new THREE.BoxGeometry(1,1,1);
@@ -782,7 +782,7 @@ function makeDotSpheres(p){
     const cw=p.w/cols, chh=p.h/rows, fd=S.freqData, sh=S.now*(.3+S.chaos*1.2); let k=0;
     for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){ const kk=(c*7+r*3+Math.floor(sh))%60, v=S.gapActive?.3:fd[4+kk*3]/255*(.7+S.chaos*.6);
       const R=Math.min(cw,chh)*.42*(v>.62?1:0), x=-p.w/2+c*cw+cw/2, y=p.h/2-(((r+(sh%1))%rows)*chh+chh/2);
-      m.compose(SV(p,x,y,.06+d*(.05+v*.7)),q,new THREE.Vector3(R*2,R*2,R*2)); im.setMatrixAt(k,m); col.set(r/rows<.5?TEAL:BLUE); im.setColorAt(k,col); k++; }
+      m.compose(SV(p,x,y,LIFT*.5+d*(.05+v*.7)),q,new THREE.Vector3(R*2,R*2,R*2)); im.setMatrixAt(k,m); col.set(r/rows<.5?TEAL:BLUE); im.setColorAt(k,col); k++; }
     im.instanceMatrix.needsUpdate=true; im.instanceColor.needsUpdate=true;
   }};
 }
