@@ -1262,8 +1262,10 @@ if (!IR){
     const cen = I.stage==='dark'||I.stage==='reveal';
     I.cx=lerp(I.cx,cen? w/2 : M.px,1-Math.exp(-dt*(cen?4:9))); I.cy=lerp(I.cy,cen? h*.46 : M.py,1-Math.exp(-dt*(cen?4:9)));
     if (I.stage==='scatter'){ I.st+=dt; if (I.st>1.0){ I.stage='rose'; I.rT=0; sizeFilm(); film.style.display='block'; } }
-    if (I.stage==='rose'){ I.rT+=dt; drawFilm(I.rT);
-      if (I.rT>ROSE_END){ I.stage='dark'; I.found=0; I.lamp=0; film.style.display='none'; setHint('커서를 움직여 어둠을 둘러보세요'); } }
+    if (I.stage==='rose'){ I.rT+=dt; drawFilm(I.rT,dt);
+      if (I.rT>2.9) setHint('커서를 대 보세요 · 클릭하면 장미가 깨집니다');
+      if (I.rT>2.9 && I.idle>14) breakRose(innerWidth/2,innerHeight*.4); }
+    if (I.stage==='break' && BR) drawBreak(dt);
     if (I.stage==='dark'){
       const moving = I.spd>.02 || curEl.classList.contains('on');
       I.lamp=lerp(I.lamp,(moving?175:100)*sc*(1+I.found*.6),1-Math.exp(-dt*3));
@@ -1289,12 +1291,24 @@ if (!IR){
       for (let k=0;k<7;k++){ const t=.16+k*.1, c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d'), id=x.createImageData(W,H), d=id.data;
         for (let i=0;i<W*H;i++){ const r=src[i*4],g=src[i*4+1],b=src[i*4+2], L=(r*.3+g*.55+b*.15)/255;
           if (L<t+(Math.random()-.5)*.04){ const k2=1.5; d[i*4]=clamp((r-128)*k2+110,0,255); d[i*4+1]=clamp((g-128)*k2+100,0,255); d[i*4+2]=clamp((b-128)*k2+130,0,255); }
-          else { d[i*4]=250; d[i*4+1]=246; d[i*4+2]=255; } d[i*4+3]=255; }
+          else { d[i*4]=156; d[i*4+1]=132; d[i*4+2]=214; } d[i*4+3]=255; }
         x.putImageData(id,0,0); FM.TH.push(c); }
       // 흐린 배경용 장미 (축소 → 확대로 블러)
       let cur=rose; for (const f of [4,10,24]){ const c=document.createElement('canvas'); c.width=Math.max(8,Math.round(W/f)); c.height=Math.max(8,Math.round(H/f)); const cx=c.getContext('2d'); cx.imageSmoothingQuality='high'; cx.drawImage(cur,0,0,c.width,c.height); cur=c; }
       for (const f of [10,4,2]){ const c=document.createElement('canvas'); c.width=Math.round(W/f); c.height=Math.round(H/f); const cx=c.getContext('2d'); cx.imageSmoothingQuality='high'; cx.drawImage(cur,0,0,c.width,c.height); cur=c; }
       FM.blur=cur;
+      // 넓은 화면용 배경: 사진 양끝(숲·물)을 거울처럼 이어 붙이고 흐리게 녹임
+      { const A=2.6, Wd=Math.round(H*A), x0=Math.round((Wd-W)/2), sw=Math.round(W*.22), c=document.createElement('canvas'); c.width=Wd; c.height=H; const x=c.getContext('2d');
+        x.drawImage(rose,x0,0);
+        let pos=x0, flip=true; while(pos>0){ pos-=sw; x.save(); if (flip){ x.translate(pos+sw,0); x.scale(-1,1); x.drawImage(rose,0,0,sw,H,0,0,sw,H); } else x.drawImage(rose,0,0,sw,H,pos,0,sw,H); x.restore(); flip=!flip; }
+        pos=x0+W; flip=true; while(pos<Wd){ x.save(); if (flip){ x.translate(pos+sw,0); x.scale(-1,1); x.drawImage(rose,W-sw,0,sw,H,0,0,sw,H); } else x.drawImage(rose,W-sw,0,sw,H,pos,0,sw,H); x.restore(); pos+=sw; flip=!flip; }
+        let b=c; for (const f of [2,4]){ const t=document.createElement('canvas'); t.width=Math.round(Wd/f); t.height=Math.round(H/f); const tx=t.getContext('2d'); tx.imageSmoothingQuality='high'; tx.drawImage(b,0,0,t.width,t.height); b=t; }
+        const out=document.createElement('canvas'); out.width=Wd; out.height=H; const ox=out.getContext('2d'); ox.imageSmoothingQuality='high'; ox.drawImage(b,0,0,Wd,H);
+        const sh=document.createElement('canvas'); sh.width=W; sh.height=H; const sx2=sh.getContext('2d'); sx2.drawImage(rose,0,0); sx2.globalCompositeOperation='destination-in';
+        const m=sx2.createLinearGradient(0,0,W,0); m.addColorStop(0,'rgba(0,0,0,0)'); m.addColorStop(.32,'rgba(0,0,0,1)'); m.addColorStop(.68,'rgba(0,0,0,1)'); m.addColorStop(1,'rgba(0,0,0,0)'); sx2.fillStyle=m; sx2.fillRect(0,0,W,H);
+        ox.drawImage(sh,x0,0);
+        const g=ox.createLinearGradient(0,0,Wd,0); g.addColorStop(0,'rgba(12,6,24,.45)'); g.addColorStop(.32,'rgba(12,6,24,.08)'); g.addColorStop(.68,'rgba(12,6,24,.08)'); g.addColorStop(1,'rgba(12,6,24,.45)'); ox.fillStyle=g; ox.fillRect(0,0,Wd,H);
+        FM.wide=out; }
       // 보석 → 가로 스캔라인 실루엣
       const S2=560, gc=document.createElement('canvas'); gc.width=gc.height=S2; const gx=gc.getContext('2d'); gx.drawImage(gimg,0,0,S2,S2); const gd=gx.getImageData(0,0,S2,S2).data;
       const sl=document.createElement('canvas'); sl.width=sl.height=S2; const sx=sl.getContext('2d'); sx.fillStyle='#f3e9ff';
@@ -1312,42 +1326,84 @@ if (!IR){
   function coverDraw(x,img,w,h,scale,ox,oy,fit){ const ir=img.width/img.height, vr=w/h; let dw,dh;
     if ((fit==='contain')?(ir>vr):(ir<vr)){ dw=w*scale; dh=dw/ir; } else { dh=h*scale; dw=dh*ir; }
     x.drawImage(img,(w-dw)/2+ox,(h-dh)/2+oy,dw,dh); }
-  const ROSE_END=6.3;
-  function drawFilm(T){
+  const PAPER_C='#9c84d6';
+  // 커서를 따라 생기는 얇은 선의 사각형들 (장미 사진 속 유리 사각형처럼)
+  const RECTS=[0,1,2,3,4].map(k=>({k,x:innerWidth/2,y:innerHeight/2,vx:0,vy:0,stiff:30+k*14,a:0}));
+  const nz=(k,a,b)=>.5+.5*Math.sin(a*1.7+k*2.3+Math.cos(b*1.1+k))*Math.cos(b*1.3-k*1.1+a*.4);
+  function drawRects(x,dt,w,h,alpha){
+    if (alpha<.01) return; const cx=M.px, cy=M.py, u=cx/w*3, v=cy/h*3;
+    RECTS.forEach(r=>{ const k=r.k, ang=I.t*.25+k*1.26, rad=40+70*nz(k,u,v);
+      const tx=cx+Math.cos(ang)*rad*(k%2?1:-.6), ty=cy+Math.sin(ang*1.3)*rad*.7-k*6;
+      r.vx+=(r.stiff*(tx-r.x)-6*r.vx)*dt; r.vy+=(r.stiff*(ty-r.y)-6*r.vy)*dt; r.x+=r.vx*dt; r.y+=r.vy*dt;
+      const rw=50+190*nz(k+3,u,v), rh=40+220*nz(k+7,v,u), rot=(nz(k+11,u+v,u)-.5)*.9, persp=(nz(k+5,v,u+.3)-.5)*.5;
+      const pts=[[-rw/2,-rh/2],[rw/2,-rh/2*(1-persp)],[rw/2,rh/2*(1+persp*.6)],[-rw/2,rh/2]].map(([px,py])=>[r.x+px*Math.cos(rot)-py*Math.sin(rot), r.y+px*Math.sin(rot)+py*Math.cos(rot)]);
+      x.globalAlpha=alpha*(.55+.45*nz(k+2,u,v));
+      x.beginPath(); pts.forEach((p,i)=>i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1])); x.closePath();
+      x.fillStyle='rgba(210,190,255,.07)'; x.fill(); x.strokeStyle='rgba(240,232,255,.75)'; x.lineWidth=1; x.stroke();
+      x.fillStyle='#f6f0ff'; pts.forEach(p=>{ x.beginPath(); x.arc(p[0],p[1],2.2,0,7); x.fill(); });
+      // 꼭짓점에서 아래로 늘어진 점선
+      const drop=[pts[k%4],pts[(k+2)%4]];
+      drop.forEach((p,i)=>{ const L=40+160*nz(k+i*4,u*1.3,v); x.setLineDash([2,4]); x.strokeStyle='rgba(240,232,255,.45)'; x.beginPath(); x.moveTo(p[0],p[1]); x.lineTo(p[0],p[1]+L); x.stroke(); x.setLineDash([]);
+        x.beginPath(); x.arc(p[0],p[1]+L,1.8,0,7); x.fill(); });
+    });
+    x.globalAlpha=1;
+  }
+  function drawFilm(T,dt){
     if (!FM.ready) return; const w=innerWidth, h=innerHeight, x=fctx, dpr=FM.dpr; x.setTransform(dpr,0,0,dpr,0,0);
-    const px=-I.mx*w*.02, py=I.my*h*.02, ease=v=>1-Math.pow(1-clamp(v,0,1),3);
+    const px=-I.mx*w*.02, py=I.my*h*.02;
     x.globalAlpha=1; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
-    const fitRose = w/h<.9 ? 'cover' : 'contain';
-    if (T<.6){ // 1) 빛이 번져 하얗게 타 버림
-      const p=T/.6, r=Math.hypot(w,h)*p*p*1.2+40; const g=x.createRadialGradient(I.ox,I.oy,0,I.ox,I.oy,r);
-      g.addColorStop(0,'rgba(255,250,255,1)'); g.addColorStop(.6,`rgba(230,210,255,${p})`); g.addColorStop(1,'rgba(230,210,255,0)'); x.fillStyle=g; x.fillRect(0,0,w,h);
-      x.globalAlpha=p*p; x.fillStyle='#faf6ff'; x.fillRect(0,0,w,h); x.globalAlpha=1;
-    } else if (T<3.7){ // 2) 하얀 화면에서 장미가 잉크처럼 맺히고 → 제 톤으로 가라앉음
-      x.fillStyle='#faf6ff'; x.fillRect(0,0,w,h);
-      const sc=1.02+T*.025, d=(T-.6);
-      if (d<1){ const k=Math.min(6,Math.floor(d*7)); coverDraw(x,FM.TH[k],w,h,sc,px,py,fitRose); }
+    if (T<.7){ // 1) 보랏빛이 번져 화면을 물들임
+      const p=T/.7, r=Math.hypot(w,h)*p*p*1.2+40; const g=x.createRadialGradient(I.ox,I.oy,0,I.ox,I.oy,r);
+      g.addColorStop(0,'rgba(196,170,250,.95)'); g.addColorStop(.55,`rgba(140,100,230,${.8*p})`); g.addColorStop(1,'rgba(90,50,180,0)'); x.fillStyle=g; x.fillRect(0,0,w,h);
+      x.globalAlpha=p*p; x.fillStyle=PAPER_C; x.fillRect(0,0,w,h); x.globalAlpha=1;
+    } else { // 2) 보라 종이 위로 장미가 잉크처럼 맺히고 → 넓은 화면의 장미로 가라앉음
+      x.fillStyle=PAPER_C; x.fillRect(0,0,w,h);
+      const d=T-.7, sc=1.02+Math.min(T,9)*.012;
+      if (d<1){ coverDraw(x,FM.TH[Math.min(6,Math.floor(d*7))],w,h,sc,px,py,'contain'); }
       else { const q=clamp((d-1)/1.1,0,1);
-        if (fitRose==='contain'){ x.globalAlpha=q; coverDraw(x,FM.blur,w,h,1.15,px*2,py*2,'cover'); x.fillStyle='rgba(10,5,20,.5)'; x.fillRect(0,0,w,h); x.globalAlpha=1; }
-        x.globalAlpha=1-q*.999; coverDraw(x,FM.TH[6],w,h,sc,px,py,fitRose); x.globalAlpha=1; x.globalAlpha=q; coverDraw(x,FM.rose,w,h,sc,px,py,fitRose); x.globalAlpha=1;
-        x.fillStyle=`rgba(250,246,255,${(1-q)*.35})`; x.fillRect(0,0,w,h); x.fillStyle=`rgba(12,6,24,${q*.28})`; x.fillRect(0,0,w,h);
-        if (fitRose==='contain'){ const g=x.createRadialGradient(w/2,h/2,h*.35,w/2,h/2,w*.6); g.addColorStop(0,'rgba(5,3,8,0)'); g.addColorStop(1,`rgba(5,3,8,${q*.9})`); x.fillStyle=g; x.fillRect(0,0,w,h); } }
-      // 앞을 스쳐 가는 흐린 유리 조각 (깊이감)
-      if (d>.8){ for (const s of FM.shards){ const xx=((s.x - (T*s.sp))%1+1)%1*w*1.3-w*.15 - I.mx*w*.06*s.d, yy=s.y*h - I.my*h*.05*s.d, sz=Math.min(w,h)*s.s*.9;
-        x.globalAlpha=.2*clamp(d-.8,0,1); x.drawImage(s.c,xx,yy,sz,sz); } x.globalAlpha=1; }
-    } else if (T<3.76){ x.fillStyle='#fffaff'; x.fillRect(0,0,w,h); // 하드컷 섬광
-    } else { // 3) 하드컷: 흐린 장미 + 스캔라인 보석 실루엣이 미끄러져 들어옴 → 어둠이 조여듦
-      const u=T-3.76;
-      x.globalAlpha=.85; coverDraw(x,FM.blur,w,h,1.25+u*.03,px*2+w*.08,py*2,'cover'); x.globalAlpha=1;
-      x.fillStyle='rgba(8,4,16,.45)'; x.fillRect(0,0,w,h);
-      const gs=Math.min(w,h)*1.05*(1+u*.04), gxp=lerp(-w*.55,-w*.12,ease(u/1.3))+(Math.random()<.08?(Math.random()-.5)*14:0)-I.mx*w*.05, gyp=h*.5-gs*.5-I.my*h*.03;
-      x.globalAlpha=clamp(u*3,0,1); x.drawImage(FM.scan,gxp+w*.12,gyp,gs,gs); x.globalAlpha=1;
-      if (u>1.4){ const v=clamp((u-1.4)/1.1,0,1), r=Math.hypot(w,h)*(1-v*v)*.75; const g=x.createRadialGradient(w/2,h*.46,r*.55,w/2,h*.46,r+1);
-        g.addColorStop(0,'rgba(5,3,8,0)'); g.addColorStop(1,'rgba(5,3,8,1)'); x.fillStyle=g; x.fillRect(0,0,w,h); if (v>=1){ x.fillStyle='#050308'; x.fillRect(0,0,w,h); } }
+        x.globalAlpha=q; coverDraw(x,FM.wide,w,h,sc,px,py,'cover'); x.globalAlpha=1-q; coverDraw(x,FM.TH[6],w,h,sc,px,py,'contain'); x.globalAlpha=1;
+        x.fillStyle=`rgba(156,132,214,${(1-q)*.3})`; x.fillRect(0,0,w,h); x.fillStyle=`rgba(12,6,24,${q*.18})`; x.fillRect(0,0,w,h);
+        I.rectA=lerp(I.rectA||0, (q>=1 && curEl.classList.contains('on'))?1:0, 1-Math.exp(-dt*3));
+        drawRects(x,dt,w,h,I.rectA); }
     }
-    // 스캔라인 + 필름 입자
-    if (T>.6){ x.globalAlpha=.9; x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
+    if (T>.7){ x.globalAlpha=.9; x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
       x.fillStyle='rgba(255,255,255,.05)'; for (let k=0;k<60;k++) x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5);
-      if (Math.random()<.12){ const y=Math.random()*h, bh=3+Math.random()*16; x.drawImage(film,0,y*dpr,w*dpr,bh*dpr,(Math.random()-.5)*40,y,w,bh); } }
+      if (Math.random()<.08){ const y=Math.random()*h, bh=3+Math.random()*14; x.drawImage(film,0,y*dpr,w*dpr,bh*dpr,(Math.random()-.5)*30,y,w,bh); } }
+  }
+  // 3) 클릭: 장미 화면이 그래픽 조각으로 깨지고, 클릭한 조각이 확대되며 보석으로 이어짐
+  let BR=null;
+  function breakRose(cx,cy){
+    if (I.stage!=='rose') return; const w=innerWidth, h=innerHeight, dpr=FM.dpr;
+    const snap=document.createElement('canvas'); snap.width=film.width; snap.height=film.height; snap.getContext('2d').drawImage(film,0,0);
+    const C=9, Rr=6, pts=[]; for (let j=0;j<=Rr;j++) for (let i=0;i<=C;i++){ const e=i===0||j===0||i===C||j===Rr; pts.push([i/C*w+(e?0:(Math.random()-.5)*w/C*.85), j/Rr*h+(e?0:(Math.random()-.5)*h/Rr*.85)]); }
+    const tris=[]; for (let j=0;j<Rr;j++) for (let i=0;i<C;i++){ const a=pts[j*(C+1)+i], b=pts[j*(C+1)+i+1], c=pts[(j+1)*(C+1)+i], d=pts[(j+1)*(C+1)+i+1]; (Math.random()<.5?[[a,b,d],[a,d,c]]:[[a,b,c],[b,d,c]]).forEach(t=>tris.push(t)); }
+    const maxD=Math.hypot(w,h);
+    const list=tris.map(t=>{ const mx=(t[0][0]+t[1][0]+t[2][0])/3, my=(t[0][1]+t[1][1]+t[2][1])/3, dx=mx-cx, dy=my-cy, dd=Math.hypot(dx,dy)+1, sp=(1-dd/maxD)*1300+250+Math.random()*400;
+      return {t,mx,my,vx:dx/dd*sp,vy:dy/dd*sp-150*Math.random(),rot:(Math.random()-.5)*6,delay:dd/maxD*.35}; });
+    let hero=list[0], best=1e9; list.forEach(p=>{ const d=Math.hypot(p.mx-cx,p.my-cy); if (d<best){best=d;hero=p;} });
+    BR={snap,list,hero,t:0,cx,cy};
+    I.stage='break'; I.pan=[0,0]; wall.style.display='none'; setHint('');
+  }
+  function drawBreak(dt){
+    const w=innerWidth, h=innerHeight, x=fctx, dpr=FM.dpr, T=(BR.t+=dt); x.setTransform(dpr,0,0,dpr,0,0);
+    x.clearRect(0,0,w,h);
+    x.globalAlpha=clamp(1-(T-.35)/.5,0,1); x.fillStyle='#050308'; x.fillRect(0,0,w,h); x.globalAlpha=1;
+    const clipTri=(t)=>{ x.beginPath(); x.moveTo(t[0][0],t[0][1]); x.lineTo(t[1][0],t[1][1]); x.lineTo(t[2][0],t[2][1]); x.closePath(); };
+    for (const p of BR.list){ if (p===BR.hero) continue;
+      const tt=Math.max(0,T-.12-p.delay), a=clamp(1-tt*1.4,0,1); if (a<=0) continue;
+      x.save(); x.globalAlpha=a; x.translate(p.mx+p.vx*tt, p.my+p.vy*tt+800*tt*tt); x.rotate(p.rot*tt); x.scale(1-tt*.4,1-tt*.4); x.translate(-p.mx,-p.my);
+      clipTri(p.t); x.clip(); x.drawImage(BR.snap,0,0,w,h);
+      x.restore(); x.save(); x.globalAlpha=a*clamp(1-Math.abs(T-.1-p.delay*.5)*5,0,1); x.translate(p.mx+p.vx*tt, p.my+p.vy*tt+800*tt*tt); x.rotate(p.rot*tt); x.translate(-p.mx,-p.my); clipTri(p.t); x.strokeStyle='rgba(220,200,255,.9)'; x.lineWidth=1; x.stroke(); x.restore(); }
+    // 클릭한 조각: 화면 가운데로 다가오며 확대 → 보석 장면으로 녹아듦
+    const H0=BR.hero, k=clamp((T-.15)/1.05,0,1), e=k*k*(3-2*k), sc=1+e*7;
+    const hx=lerp(H0.mx,w/2,e), hy=lerp(H0.my,h*.45,e);
+    x.save(); x.globalAlpha=clamp(1-(T-.85)/.55,0,1); x.translate(hx,hy); x.scale(sc,sc); x.rotate(e*.25); x.translate(-H0.mx,-H0.my);
+    clipTri(H0.t); x.clip(); x.drawImage(BR.snap,0,0,w,h); x.restore();
+    x.save(); x.globalAlpha=clamp(1-(T-.6)/.5,0,1); x.translate(hx,hy); x.scale(sc,sc); x.rotate(e*.25); x.translate(-H0.mx,-H0.my); clipTri(H0.t); x.strokeStyle='rgba(240,230,255,.9)'; x.lineWidth=1.2/sc; x.stroke(); x.restore();
+    // 글리치 띠
+    if (T<1){ for (let n=0;n<Math.floor((1-T)*10);n++){ const y=Math.random()*h, bh=3+Math.random()*24; x.drawImage(film,0,y*dpr,w*dpr,bh*dpr,(Math.random()-.5)*90*(1-T),y,w,bh);
+      x.globalCompositeOperation='lighter'; x.fillStyle=Math.random()<.5?'rgba(168,85,247,.16)':'rgba(125,211,252,.12)'; x.fillRect(0,y,w,Math.max(1,bh*.2)); x.globalCompositeOperation='source-over'; } }
+    if (T>1.5){ I.stage='gem'; film.style.display='none'; intro.classList.remove('walling'); I.idle=0; BR=null; }
   }
 
   // 깨진 유리처럼: 금이 퍼지고 → 뾰족한 검은 조각들이 떨어져 나가며 본편이 드러남
@@ -1414,7 +1470,7 @@ if (!IR){
 
   // 짧게 누르면 깨짐, 끌면 돌리기 (터치에서도)
   let pd=null;
-  intro.addEventListener('pointerdown',e=>{ I.idle=0; if (I.stage==='text'){ scatterAll(e.clientX,e.clientY); return; } if (I.stage==='rose'){ I.rT=Math.max(I.rT,3.7); return; } if (I.stage!=='gem') return; if (!I.broken && I.stage==='gem') pd={x:e.clientX,y:e.clientY,t:performance.now()}; });
+  intro.addEventListener('pointerdown',e=>{ I.idle=0; if (I.stage==='text'){ scatterAll(e.clientX,e.clientY); return; } if (I.stage==='rose'){ if (I.rT<2.8) I.rT=2.8; else breakRose(e.clientX,e.clientY); return; } if (I.stage==='break') return; if (I.stage!=='gem') return; if (!I.broken && I.stage==='gem') pd={x:e.clientX,y:e.clientY,t:performance.now()}; });
   intro.addEventListener('pointerup',e=>{
     if (I.broken||!pd) return; const moved=Math.hypot(e.clientX-pd.x,e.clientY-pd.y), quick=performance.now()-pd.t<450; pd=null;
     if (moved>12||!quick) return;
@@ -1438,7 +1494,7 @@ if (!IR){
     I.f=lerp(I.f,fT,1-Math.exp(-dt*3.5));
     gem.scale.set(sz,sz,sz);
     // 어둠 속 둘러보기: 커서를 움직이면 공간이 움직이고, 숨은 보석이 가운데 빛으로 들어와야 찾음
-    const searching = I.stage==='text'||I.stage==='scatter'||I.stage==='rose'||I.stage==='dark';
+    const searching = false;
     const AX=(I.visW||10)*.42, AY=(I.visH||6)*.38;
     if (!I.G0) I.G0=[(Math.random()<.5?-1:1)*(.5+Math.random()*.35)*AX, (Math.random()<.5?-1:1)*(.45+Math.random()*.35)*AY];
     const ptx = searching? I.G0[0]-M.tx*AX+Math.sin(I.t*.23)*.35 : 0, pty = searching? I.G0[1]-M.ty*AY+Math.sin(I.t*.19)*.25 : 0;
