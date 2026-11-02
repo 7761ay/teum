@@ -122,7 +122,7 @@
   <canvas id="gemGL"></canvas>
   <canvas id="glitch"></canvas>
   <canvas id="wall"></canvas>
-  <small id="wHint">마우스를 움직여 글자 사이를 갈라 보세요</small>
+  <small id="wHint">화면을 눌러 글자를 흩어 보세요</small>
   <div class="i-bottom">
     <h1>틈</h1>
     <p>소란 속의 빈자리</p>
@@ -1185,7 +1185,7 @@ if (!IR){
 
   /* ---------- 0단계: 글자 벽 (THE SPACE LEFT BY DECISIONS) ---------- */
   const wall=document.getElementById('wall'), wctx=wall.getContext('2d');
-  I.stage='text'; I.reveal=0; I.hole=0; I.spd=0; I.cx=innerWidth/2; I.cy=innerHeight/2; I.lpx=null; I.ot=0;
+  I.stage='text'; I.reveal=0; I.hole=0; I.autoT=0; I.spd=0; I.cx=innerWidth/2; I.cy=innerHeight/2; I.lpx=null; I.ot=0;
   const PHR=['THE SPACE LEFT BY DECISIONS','THE SPACE LEFT BY DECISIONS','The Space Left By Decisions','THE SPACE LEFT BY DECISIONS','The Space LEFT BY DECISIONS'];
   let rows=[], WR={};
   function buildWall(){
@@ -1214,42 +1214,61 @@ if (!IR){
   }
   buildWall(); addEventListener('resize',()=>{ if (I.alive&&I.stage!=='gem') buildWall(); });
   const easeIO=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+  // 클릭한 자리마다 생기는 '흩어짐' (열렸다가 천천히 다시 닫힘)
+  const bursts=[];
+  function burstR(bt,R){ const o=1-Math.pow(1-clamp(bt/.35,0,1),3), c=bt<2.4?1:clamp(1-(bt-2.4)/1.6,0,1); return R*o*c*c*(3-2*c); }
   function drawWall(dt, split){
-    const {dpr,w,h,rh}=WR, x=wctx, t=I.t, cx=I.cx, cy=I.cy, hole=I.hole, S_=40, sw=w/S_;
+    const {dpr,w,h,rh}=WR, x=wctx, t=I.t, S_=40, sw=w/S_, sc=Math.min(w,h)/900;
     x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,w,h);
-    // 검은 막 + 커서 자리의 틈
+    for (let k=bursts.length-1;k>=0;k--){ bursts[k].t+=dt; if (bursts[k].t>4) bursts.splice(k,1); }
+    const holes=bursts.map(b=>({x:b.x,y:b.y,r:burstR(b.t,b.R),b}));
+    // 검은 막: 흩어진 자리만 뚫림
     x.globalAlpha=1-split; x.fillStyle='#050308'; x.fillRect(0,0,w,h);
-    if (hole>2){ x.globalCompositeOperation='destination-out'; const g=x.createRadialGradient(cx,cy,0,cx,cy,hole*1.3);
-      g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(.55,'rgba(0,0,0,.9)'); g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g;
-      x.save(); x.translate(cx,cy); x.scale(.75,1.15); x.translate(-cx,-cy); x.beginPath(); x.arc(cx,cy,hole*1.3,0,7); x.fill(); x.restore(); x.globalCompositeOperation='source-over'; }
+    x.globalCompositeOperation='destination-out';
+    for (const hh of holes){ if (hh.r<2) continue;
+      x.save(); x.translate(hh.x,hh.y); x.scale(.85,1.1);
+      const g=x.createRadialGradient(0,0,0,0,0,hh.r*1.2); g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(.55,'rgba(0,0,0,.95)'); g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g;
+      x.beginPath(); x.arc(0,0,hh.r*1.2,0,7); x.fill(); x.restore(); }
+    x.globalCompositeOperation='source-over';
+    // 마우스는 글자를 살짝 울렁이게만 함
+    const mr=70*sc*(.4+I.spd);
     rows.forEach((r,i)=>{
       r.off=((r.off+r.dir*r.sp*dt)%r.tw+r.tw)%r.tw;
       const baseY=(i-1)*rh, fl=.78+.22*Math.sin(t*2.3+r.ph)*(Math.random()<.02?3:1);
       x.globalAlpha=clamp(fl,0,1)*(1-split*.6);
       for (let s=0;s<S_;s++){
         const x0=s*sw, xm=x0+sw/2;
-        const wy=Math.sin(xm*.005+t*1.15+i*.55)*rh*.2+Math.sin(xm*.013-t*.8+i*1.3)*rh*.07;
-        const dyc=baseY+rh/2+wy-cy, fy=Math.exp(-dyc*dyc/(2*Math.pow(hole*.85+1,2)));
-        const dxc=xm-cx, push=Math.sign(dxc||1)*hole*1.25*fy*Math.exp(-Math.abs(dxc)/(w*.5));
+        let wy=Math.sin(xm*.005+t*1.15+i*.55)*rh*.2+Math.sin(xm*.013-t*.8+i*1.3)*rh*.07;
+        const ym=baseY+rh/2+wy; let px=0, py=0;
+        { const dx=xm-I.cx, dy=ym-I.cy, f=Math.exp(-(dx*dx+dy*dy)/(2*mr*mr)); wy+=Math.sin(t*9+s*.7)*f*rh*.25; px+=Math.sign(dx||1)*f*mr*.25; }
+        for (const hh of holes){ if (hh.r<1) continue; const dx=xm-hh.x, dy=ym-hh.y, d=Math.hypot(dx,dy)+1e-3;
+          const f=Math.exp(-Math.pow(Math.max(0,d-hh.r*.3),2)/(2*Math.pow(hh.r*.9,2)));
+          const jit=hh.b.seed[(s+i*7)%hh.b.seed.length];
+          px+=dx/d*hh.r*1.35*f*(.8+.5*jit); py+=dy/d*hh.r*.55*f*(.6+.8*jit); }
         const sp=split>0? Math.sign(xm-w/2||1)*easeIO(clamp(split*1.15-(i%4)*.04,0,1))*w*.75 : 0;
-        const u=(x0+r.off)*dpr;
-        x.drawImage(r.c,u,0,sw*dpr+1,r.c.height,x0+push+sp,baseY+wy-rh*.3,sw+.7,rh*1.6);
+        x.drawImage(r.c,(x0+r.off)*dpr,0,sw*dpr+1,r.c.height,x0+px+sp,baseY+wy+py-rh*.3,sw+.7,rh*1.6);
       }
     });
     x.globalAlpha=1;
+    return holes;
   }
+  const wHint=document.getElementById('wHint');
   function openCurtain(){ if (I.stage!=='text') return; I.stage='opening'; I.ot=0; }
+  function addBurst(x,y,auto){
+    const sc=Math.min(innerWidth,innerHeight)/900, seed=[]; for (let k=0;k<23;k++) seed.push(Math.random());
+    bursts.push({x,y,t:0,R:(auto?120:210)*sc*1.4,seed,auto});
+    if (!auto && Math.hypot(x-I.sx,y-I.sy) < 210*sc*1.4*.8+I.sr*.5){ I.reveal=Math.min(1,I.reveal+.55);
+      wHint.textContent = I.reveal>=1? '' : '무언가 있어요 · 한 번 더 눌러 보세요'; }
+    if (I.reveal>=1) setTimeout(openCurtain,450);
+  }
   function wallStep(dt){
-    const w=innerWidth, h=innerHeight, sc=Math.min(w,h)/900;
-    let tx=M.px, ty=M.py, auto=false;
-    if (I.idle>4 || !curEl.classList.contains('on') && I.idle>2){ auto=true; tx=w/2+Math.sin(I.t*.45)*w*.3; ty=h/2+Math.sin(I.t*.31)*h*.25; }
     const sp = I.lpx? Math.hypot(M.px-I.lpx[0],M.py-I.lpx[1])/Math.max(dt,1e-3) : 0; I.lpx=[M.px,M.py];
     I.spd=lerp(I.spd,Math.min(sp/1400,1),1-Math.exp(-dt*3));
-    I.cx=lerp(I.cx,tx,1-Math.exp(-dt*7)); I.cy=lerp(I.cy,ty,1-Math.exp(-dt*7));
-    const target=(auto?130:110)*sc*1.6 + I.spd*190*sc + I.reveal*160*sc;
-    I.hole=lerp(I.hole,target,1-Math.exp(-dt*(target>I.hole?6:2)));
-    if (!auto && Math.hypot(I.cx-I.sx,I.cy-I.sy) < I.hole*.9+I.sr*.3) I.reveal=Math.min(1,I.reveal+dt*.32); else I.reveal=Math.max(0,I.reveal-dt*.08);
-    if (I.reveal>=1) openCurtain();
+    I.cx=lerp(I.cx,M.px,1-Math.exp(-dt*7)); I.cy=lerp(I.cy,M.py,1-Math.exp(-dt*7));
+    // 아무도 없을 때: 보석과 먼 곳에서 가끔 저절로 흩어짐 (보석은 드러나지 않음)
+    I.autoT=(I.autoT||0)+dt;
+    if (I.stage==='text' && I.idle>5 && I.autoT>3.2){ I.autoT=0;
+      for (let k=0;k<8;k++){ const ax=Math.random()*innerWidth, ay=Math.random()*innerHeight; if (Math.hypot(ax-I.sx,ay-I.sy)>I.sr*2.4){ addBurst(ax,ay,true); break; } } }
     if (I.stage==='opening'){ I.ot+=dt; const k=clamp(I.ot/1.4,0,1); drawWall(dt,k);
       if (k>=1){ I.stage='gem'; wall.style.display='none'; intro.classList.remove('walling'); I.idle=0; } }
     else drawWall(dt,0);
@@ -1279,11 +1298,11 @@ if (!IR){
 
   // 짧게 누르면 깨짐, 끌면 돌리기 (터치에서도)
   let pd=null;
-  intro.addEventListener('pointerdown',e=>{ if (!I.broken) pd={x:e.clientX,y:e.clientY,t:performance.now()}; I.idle=0; });
+  intro.addEventListener('pointerdown',e=>{ I.idle=0; if (I.stage==='text'){ addBurst(e.clientX,e.clientY,false); return; } if (!I.broken && I.stage==='gem') pd={x:e.clientX,y:e.clientY,t:performance.now()}; });
   intro.addEventListener('pointerup',e=>{
     if (I.broken||!pd) return; const moved=Math.hypot(e.clientX-pd.x,e.clientY-pd.y), quick=performance.now()-pd.t<450; pd=null;
     if (moved>12||!quick) return;
-    if (I.stage!=='gem'){ openCurtain(); return; }
+    if (I.stage!=='gem') return;
     if (Math.hypot(e.clientX-I.sx,e.clientY-I.sy)<I.sr*1.15) shatter();
     else { const h=document.getElementById('iHint'); h.style.color='#fff'; setTimeout(()=>h.style.color='',400); }
   });
@@ -1303,7 +1322,7 @@ if (!IR){
     I.f=lerp(I.f,fT,1-Math.exp(-dt*3.5));
     gem.scale.set(sz,sz,sz);
     gem.position.set(-GC[0]*sz*.3*I.f + I.mx*.2, I.gy+Math.sin(I.t*.8)*.05, 0);
-    gem.rotation.set(-I.my*.75, I.mx*1.05, 0);
+    if (I.stage!=='gem') gem.rotation.set(Math.sin(I.t*.3)*.05, Math.sin(I.t*.25)*.08, 0); else gem.rotation.set(-I.my*.75, I.mx*1.05, 0);
     gemMat.opacity = I.broken? 0 : 1-clamp(I.f/.18,0,1);
     glow.position.set(gem.position.x+GC[0]*sz, gem.position.y, -1.2); glow.scale.set(sz*1.15,sz*1.15,1);
     iCam.position.set(I.mx*.25, I.my*.15, 10); iCam.lookAt(0,0,0);
@@ -1311,7 +1330,7 @@ if (!IR){
       gemScreen();
       if (I.stage!=='gem') wallStep(dt);
       const near=I.stage==='gem' && Math.hypot(M.px-I.sx,M.py-I.sy) < I.sr*1.15 && curEl.classList.contains('on');
-      I.crack = I.stage!=='gem'? I.reveal*.6 : (near? Math.min(1,I.crack+dt*.5) : Math.max(0,I.crack-dt*.3));
+      I.crack = I.stage!=='gem'? I.reveal*.5 : (near? Math.min(1,I.crack+dt*.5) : Math.max(0,I.crack-dt*.3));
       placeVoxels(I.f,0);
       sparkles.forEach(sp=>{ const u=sp.userData; v3.set(u.u,u.v,.05).applyMatrix4(gem.matrixWorld); sp.position.copy(v3);
         const s=sz*u.sz*(.3+.7*Math.max(0,Math.sin(I.t*2+u.ph)))*(1+I.crack*.6)*(1-I.f*.6); sp.scale.set(s,s,1); });
@@ -1329,7 +1348,7 @@ if (!IR){
     requestAnimationFrame(introLoop);
   }
   requestAnimationFrame(introLoop);
-  window.__shatter=shatter; window.__I=I;
+  window.__shatter=shatter; window.__I=I; window.__dbg=()=>({f:I.f,op:gemMat.opacity,vox:VOX?VOX.im.visible:null,sz:I.size,gx:gem.position.x,rot:gem.rotation.y});
 }
 window.__S=S; window.__P=P; window.__setText=(v)=>{ txt.value=v; txt.dispatchEvent(new Event('input')); };
 const fontsReady = document.fonts ? Promise.all(['300','400','700'].map(w=>document.fonts.load(`${w} 16px "Kkakdugi Drafting"`,'가A'))).catch(()=>{}) : Promise.resolve();
