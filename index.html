@@ -1408,10 +1408,14 @@ if (!IR){
       petals.push({x:H[0]+Math.cos(a)*r, y:H[1]+Math.sin(a)*r*.8, vx:Math.cos(a)*sp+(Math.random()-.5)*120, vy:Math.sin(a)*sp*.7-160-Math.random()*200,
         rot:Math.random()*6.28, spin:(Math.random()-.5)*7, s:h*(.05+Math.random()*.09), z:.6+Math.random()*1.2, img:FM.facets[i%FM.facets.length], pt:Math.random()*.1}); }
     const hero={x:H[0]+hr*.25, y:H[1]-hr*.1, vx:90, vy:-60, rot:-.25, spin:.6, s:h*.13, z:1, img:FM.facets[0], pt:0};
-    const shards=[]; { const S=hr*2.4, n=6; const pts=[]; for (let j=0;j<=n;j++) for (let i=0;i<=n;i++) pts.push([H[0]-S/2+i/n*S+(i%n?(Math.random()-.5)*S/n*.8:0), H[1]-S/2+j/n*S+(j%n?(Math.random()-.5)*S/n*.8:0)]);
-      for (let j=0;j<n;j++) for (let i=0;i<n;i++){ const A=pts[j*(n+1)+i],B=pts[j*(n+1)+i+1],C=pts[(j+1)*(n+1)+i],D=pts[(j+1)*(n+1)+i+1];
-        [[A,B,D],[A,D,C]].forEach(t=>{ const mx=(t[0][0]+t[1][0]+t[2][0])/3, my=(t[0][1]+t[1][1]+t[2][1])/3, dx=mx-H[0], dy=my-H[1], d=Math.hypot(dx,dy)+1;
-          if (d>S*.55) return; shards.push({t,mx,my,vx:dx/d*(300+Math.random()*600),vy:dy/d*(300+Math.random()*600)-100,rot:(Math.random()-.5)*5}); }); } }
+    // 꽃송이를 픽셀(큐브) 조각으로 쪼갬: 큰 조각과 작은 조각이 섞임
+    const shards=[]; { const S=hr*2.6;
+      for (const cell of [hr*.34,hr*.17,hr*.09]) for (let gy=H[1]-S/2; gy<H[1]+S/2; gy+=cell) for (let gx=H[0]-S/2; gx<H[0]+S/2; gx+=cell){
+        const mx=gx+cell/2, my=gy+cell/2, dx=mx-H[0], dy=my-H[1], d=Math.hypot(dx,dy*1.15)+1;
+        if (d>S*.5 || Math.random()>(cell>hr*.3?.35:cell>hr*.15?.5:.55)) continue;
+        const sp=200+Math.random()*700;
+        shards.push({x0:gx,y0:gy,c:cell*(.85+Math.random()*.3),mx,my,vx:dx/d*sp+(Math.random()-.5)*160,vy:dy/d*sp*.8-60-Math.random()*160,
+          rot:(Math.random()-.5)*2.2,dz:.4+Math.random()*1.2,delay:Math.random()*.12}); } }
     const streaks=[]; for (let i=0;i<55;i++) streaks.push({x:Math.random(),y:Math.random(),l:.06+Math.random()*.25,sp:1.6+Math.random()*2.6,a:.15+Math.random()*.45,wd:Math.random()<.8?1:2});
     BR={t:0,H,hr,sc,px,py,snap,petals,hero,shards,streaks,pix:[],prism:[]};
     I.stage='break'; I.pan=[0,0]; wall.style.display='none'; setHint('');
@@ -1439,10 +1443,17 @@ if (!IR){
     const gone=sm(T/.45)*(1-sm((T-2)/1)); if (gone>0){ const g=x.createRadialGradient(H[0],H[1],0,H[0],H[1],B.hr*1.6); g.addColorStop(0,`rgba(40,28,70,${gone*.85})`); g.addColorStop(1,'rgba(40,28,70,0)'); x.fillStyle=g; x.fillRect(H[0]-B.hr*2,H[1]-B.hr*2,B.hr*4,B.hr*4); }
     x.fillStyle=`rgba(8,4,16,${.1+blurK*.42})`; x.fillRect(fx-w*2,fy-h*2,w*4,h*4);
     // 그래픽처럼 깨지는 조각
-    for (const sd of B.shards){ const tt=T, a=clamp(1-tt*1.6,0,1); if (a<=0) continue;
-      x.save(); x.globalAlpha=a; x.translate(sd.mx+sd.vx*tt,sd.my+sd.vy*tt+300*tt*tt); x.rotate(sd.rot*tt); x.translate(-sd.mx,-sd.my);
-      x.beginPath(); x.moveTo(sd.t[0][0],sd.t[0][1]); x.lineTo(sd.t[1][0],sd.t[1][1]); x.lineTo(sd.t[2][0],sd.t[2][1]); x.closePath();
-      x.save(); x.clip(); x.drawImage(B.snap,0,0,w,h); x.restore(); x.strokeStyle='rgba(235,225,255,.7)'; x.lineWidth=1/Z; x.stroke(); x.restore(); }
+    // 픽셀(큐브) 조각: 사진 조각을 담고, 옆면이 보이는 작은 큐브처럼 날아감
+    for (const sd of B.shards){ const tt=Math.max(0,T-sd.delay), a=clamp(1-tt*1.15,0,1); if (a<=0) continue;
+      const c=sd.c*(1+tt*sd.dz*.6), dep=c*.28*(.5+tt*sd.dz);
+      x.save(); x.globalAlpha=a; x.translate(sd.mx+sd.vx*tt,sd.my+sd.vy*tt+340*tt*tt); x.rotate(sd.rot*tt);
+      // 옆면 (두께)
+      x.fillStyle='rgba(70,45,120,.9)'; x.beginPath(); x.moveTo(c/2,-c/2); x.lineTo(c/2+dep,-c/2+dep*.6); x.lineTo(c/2+dep,c/2+dep*.6); x.lineTo(c/2,c/2); x.fill();
+      x.fillStyle='rgba(40,24,80,.9)'; x.beginPath(); x.moveTo(-c/2,c/2); x.lineTo(c/2,c/2); x.lineTo(c/2+dep,c/2+dep*.6); x.lineTo(-c/2+dep,c/2+dep*.6); x.fill();
+      // 앞면 (사진 조각)
+      const k=B.snap.width/w; x.drawImage(B.snap,sd.x0*k,sd.y0*k,sd.c*k,sd.c*k,-c/2,-c/2,c,c);
+      x.fillStyle=`rgba(200,170,255,${.08+.12*Math.min(1,tt*3)})`; x.fillRect(-c/2,-c/2,c,c);
+      x.strokeStyle='rgba(235,225,255,.35)'; x.lineWidth=1/Z; x.strokeRect(-c/2,-c/2,c,c); x.restore(); }
     // 픽셀 조각 · 프리즘 잔상
     const PC=['216,190,255','190,160,245','236,222,255','170,140,235'];
     const spawn=(p,sz,many)=>{ p.pt-=dt; if (p.pt<=0){ p.pt=many?.02:.04+Math.random()*.05;
