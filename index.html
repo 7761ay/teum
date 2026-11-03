@@ -388,6 +388,7 @@ function endGapAudio(t){
 }
 function scheduler(){
   if (!AC) return;
+  if (!S.started){ G.next=G.next16=AC.currentTime+.1; return; }   // 시작 전에는 효과음만
   const ahead = AC.currentTime + .12;
   while (G.next < ahead) scheduleStep(G.next);
   while (G.next16 < ahead){ scheduleClutter(G.next16, G.c16++); G.next16 += STEP/2; }
@@ -1285,7 +1286,7 @@ if (!IR){
     x.globalAlpha=1;
   }
   const SEED=[]; for (let k=0;k<97;k++) SEED.push(Math.random());
-  function scatterAll(x,y){ if (I.stage!=='text') return; I.stage='scatter'; I.st=0; I.ox=x; I.oy=y; setHint(''); }
+  function scatterAll(x,y){ if (I.stage!=='text') return; try{ if (!AC) initAudio(); AC.resume(); shatterSound(); }catch(err){} I.stage='scatter'; I.st=0; I.ox=x; I.oy=y; setHint(''); }
   function wallStep(dt){
     const w=innerWidth, h=innerHeight, sc=Math.min(w,h)/900;
     const sp = I.lpx? Math.hypot(M.px-I.lpx[0],M.py-I.lpx[1])/Math.max(dt,1e-3) : 0; I.lpx=[M.px,M.py];
