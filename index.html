@@ -1271,7 +1271,7 @@ if (!IR){
     if (I.stage==='rose'){ I.rT+=dt; drawFilm(I.rT,dt);
       if (I.rT>2.9) setHint('커서를 대 보세요 · 클릭하면 장미가 깨집니다');
       if (I.rT>2.9 && I.idle>14) breakRose(innerWidth/2,innerHeight*.4); }
-    if (I.stage==='break' && BR) drawBreak(dt);
+    if (BR && (I.stage==='break'||I.stage==='assemble')) drawBreak(dt);
     if (I.stage==='dark'){
       const moving = I.spd>.02 || curEl.classList.contains('on');
       I.lamp=lerp(I.lamp,(moving?175:100)*sc*(1+I.found*.6),1-Math.exp(-dt*3));
@@ -1419,89 +1419,108 @@ if (!IR){
   function drawBreak(dt){
     const w=innerWidth, h=innerHeight, x=fctx, dpr=FM.dpr, T=(BR.t+=dt); x.setTransform(dpr,0,0,dpr,0,0);
     const sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, eio=v=>{ v=clamp(v,0,1); return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2; };
-    const side=(I.sr||200)/.4, P=[I.sx,I.sy], B=BR, H=B.H;
-    const FALL=1.55;                       // 떨어지는 장면으로 구도가 바뀌는 시점
-    const hero=B.hero; if (T<FALL){ hero.x+=hero.vx*dt; hero.y+=hero.vy*dt; hero.vy+=140*dt; hero.rot+=hero.spin*dt; }
-    if (T<FALL){
-      // 카메라: 한 장의 꽃잎으로 다가감
-      const zk=eio((T-.55)/1.0), Z=lerp(1,3.4,zk), fx=lerp(w/2,hero.x,zk), fy=lerp(h/2,hero.y,zk);
-      x.fillStyle='#050308'; x.fillRect(0,0,w,h);
-      x.save(); x.translate(w/2,h/2); x.scale(Z,Z); x.translate(-fx,-fy);
-      const blurK=sm((T-.4)/.9);
-      x.globalAlpha=1-blurK; coverDraw(x,FM.wide,w,h,B.sc,B.px,B.py,'cover');
-      x.globalAlpha=blurK; coverDraw(x,FM.wideBlur,w,h,B.sc,B.px,B.py,'cover'); x.globalAlpha=1;
-      // 꽃송이 자리가 흩어지며 비어 감
-      const gone=sm(T/.45); if (gone>0){ const g=x.createRadialGradient(H[0],H[1],0,H[0],H[1],B.hr*1.6); g.addColorStop(0,`rgba(40,28,70,${gone*.85})`); g.addColorStop(1,'rgba(40,28,70,0)'); x.fillStyle=g; x.fillRect(H[0]-B.hr*2,H[1]-B.hr*2,B.hr*4,B.hr*4); }
-      x.fillStyle=`rgba(8,4,16,${.1+blurK*.4})`; x.fillRect(fx-w,fy-h,w*2,h*2);
-      // 그래픽처럼 깨지는 조각들
-      for (const s of B.shards){ const tt=T, a=clamp(1-tt*1.6,0,1); if (a<=0) continue;
-        x.save(); x.globalAlpha=a; x.translate(s.mx+s.vx*tt,s.my+s.vy*tt+300*tt*tt); x.rotate(s.rot*tt); x.translate(-s.mx,-s.my);
-        x.beginPath(); x.moveTo(s.t[0][0],s.t[0][1]); x.lineTo(s.t[1][0],s.t[1][1]); x.lineTo(s.t[2][0],s.t[2][1]); x.closePath();
-        x.save(); x.clip(); x.drawImage(B.snap,0,0,w,h); x.restore(); x.strokeStyle='rgba(235,225,255,.7)'; x.lineWidth=1/Z; x.stroke(); x.restore(); }
-      // 흩날리는 꽃잎들
-      const PC=['216,190,255','190,160,245','236,222,255','170,140,235'];
-      const spawn=(p,sz)=>{ p.pt-=dt; if (p.pt<=0){ p.pt=.035+Math.random()*.05;
-          for (let k=0;k<2;k++) B.pix.push({x:p.x+(Math.random()-.5)*sz*.6, y:p.y+(Math.random()-.5)*sz*.5, s:Math.max(2,sz*(.05+Math.random()*.12)), vy:30+Math.random()*90, a:.7, c:PC[(Math.random()*4)|0], col:Math.random()<.35});
-          if (Math.random()<.18) B.prism.push({x:p.x-sz*(.3+Math.random()*1.2), y:p.y+(Math.random()-.5)*sz*.6, l:sz*(1.5+Math.random()*3.5), t:0}); } };
-      for (const p of B.petals){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=260*dt; p.vx*=Math.exp(-dt*.6); p.rot+=p.spin*dt; if (T<1.7) spawn(p,p.s); }
-      spawn(hero,hero.s);
-      // 픽셀 조각 (아래로 번지는 세로 픽셀 자국)
-      for (let k=B.pix.length-1;k>=0;k--){ const q=B.pix[k]; q.y+=q.vy*dt; q.a-=dt*.75; if (q.a<=0){ B.pix.splice(k,1); continue; }
-        const ss=q.s/Math.max(1,Z*.8); x.fillStyle=`rgba(${q.c},${q.a*.65})`; if (q.col){ x.fillRect(q.x,q.y,ss*.7,ss*3.2); } else x.fillRect(q.x,q.y,ss,ss); }
-      // 가로로 긴 프리즘 잔상 (빛이 색으로 갈라짐)
-      x.globalCompositeOperation='lighter';
-      for (let k=B.prism.length-1;k>=0;k--){ const r=B.prism[k]; r.t+=dt; const a=1-r.t/.45; if (a<=0){ B.prism.splice(k,1); continue; }
-        const lw=Math.max(1,1.4/Z);
-        [['255,90,140',-lw],['120,255,220',0],['120,140,255',lw]].forEach(([c,o])=>{ const g=x.createLinearGradient(r.x,0,r.x+r.l,0); g.addColorStop(0,`rgba(${c},0)`); g.addColorStop(.5,`rgba(${c},${.55*a})`); g.addColorStop(1,`rgba(${c},0)`); x.fillStyle=g; x.fillRect(r.x+o*2,r.y+o,r.l,lw); }); }
-      x.globalCompositeOperation='source-over';
-      for (const p of B.petals){ const a=clamp(T*5,0,1)*clamp(1.9-T,0,1); drawPetal(x,p.x,p.y,p.s*(.4+.6*clamp(T*3,0,1)),p.rot,a*(.7+.3/p.z),p.img); }
-      drawPetal(x,hero.x,hero.y,hero.s*clamp(T*4,0,1),hero.rot,1,hero.img);
-      x.restore();
-      // 깨지는 순간의 글리치
-      if (T<.45){ for (let n=0;n<Math.floor((.45-T)*30);n++){ const y=Math.random()*h, bh=3+Math.random()*20; x.drawImage(film,0,y*dpr,w*dpr,bh*dpr,(Math.random()-.5)*60,y,w,bh);
-        x.globalCompositeOperation='lighter'; x.fillStyle=Math.random()<.5?'rgba(168,85,247,.16)':'rgba(125,211,252,.12)'; x.fillRect(0,y,w,Math.max(1,bh*.2)); x.globalCompositeOperation='source-over'; } }
-    } else {
-      // 구도 변경: 한 장의 꽃잎이 빠르게 떨어짐 (배경과 빛줄기가 위로 흘러감)
-      const u=T-FALL, toGem=sm((u-1.0)/.7), speed=lerp(1,0,toGem);
-      B.scroll=(B.scroll||0)+dt*h*1.9*speed;
-      x.fillStyle='#050308'; x.fillRect(0,0,w,h);
-      { const img=FM.wideBlur, ir=img.width/img.height, dh=h*1.5, dw=Math.max(w*1.1,dh*ir), ox=(w-dw)/2-I.mx*w*.03, off=B.scroll%dh;
-        x.globalAlpha=1-toGem;
-        for (let k=-1;k<2;k++){ const yy=k*dh-off+dh*.2; x.save(); if (((k%2)+2)%2){ x.translate(0,yy+dh); x.scale(1,-1); x.drawImage(img,ox,0,dw,dh); } else x.drawImage(img,ox,yy,dw,dh); x.restore(); }
-        x.globalAlpha=1; x.fillStyle='rgba(8,4,16,.5)'; x.fillRect(0,0,w,h); }
-      if (toGem>0){ x.globalAlpha=toGem; bgDraw(x,w,h); x.globalAlpha=1; }
-      // 빛줄기
-      x.globalCompositeOperation='lighter';
-      for (const s of B.streaks){ s.y-=s.sp*dt*speed; if (s.y<-s.l) s.y+=1+s.l; const X=s.x*w, Y=s.y*h, L=s.l*h*(.4+speed*.6);
-        const g=x.createLinearGradient(0,Y,0,Y+L); g.addColorStop(0,'rgba(200,170,255,0)'); g.addColorStop(1,`rgba(200,170,255,${s.a*speed})`); x.fillStyle=g; x.fillRect(X,Y,s.wd,L); }
-      x.globalCompositeOperation='source-over';
-      // 꽃잎 (흔들리며 떨어짐 + 위로 남는 잔상)
-      const sway=Math.sin(u*5)*.12, pr=-.08+sway, ps=lerp(side*1.05,side*.7,toGem), pcx=P[0]+Math.sin(u*3.2)*w*.012, pcy=lerp(P[1]-side*.05,P[1],toGem);
-      const enter=eio(u/.35), pa=(1-sm((u-1.05)/.45));
-      for (let k=4;k>=1;k--) drawPetal(x,pcx,pcy-k*ps*.16*speed-(1-enter)*h*.4,ps,pr+k*.03,pa*.12*speed);
-      drawPetal(x,pcx,pcy-(1-enter)*h*.4,ps,pr,pa);
-      // 떨어지는 꽃잎에서 흩어지는 픽셀과 프리즘 잔상
-      if (pa>.05){ B.fp=(B.fp||0)-dt; if (B.fp<=0){ B.fp=.03; const yy=pcy-(1-enter)*h*.4;
-          for (let k=0;k<3;k++) B.pix.push({x:pcx+(Math.random()-.5)*ps*.8, y:yy+(Math.random()-.3)*ps*.6, s:ps*(.02+Math.random()*.05), vy:-(h*.6)*speed-40, a:.8, c:['216,190,255','190,160,245','236,222,255'][k], col:Math.random()<.4});
-          if (Math.random()<.35) B.prism.push({x:pcx-ps*(.6+Math.random()*.8), y:yy+(Math.random()-.5)*ps*.7, l:ps*(1.2+Math.random()*2), t:0}); } }
-      for (let k=B.pix.length-1;k>=0;k--){ const q=B.pix[k]; q.y+=q.vy*dt; q.a-=dt*1.1; if (q.a<=0){ B.pix.splice(k,1); continue; } x.fillStyle=`rgba(${q.c},${q.a*.7})`; if (q.col) x.fillRect(q.x,q.y,q.s*.7,q.s*3.2); else x.fillRect(q.x,q.y,q.s,q.s); }
-      x.globalCompositeOperation='lighter';
-      for (let k=B.prism.length-1;k>=0;k--){ const r=B.prism[k]; r.t+=dt; const a=1-r.t/.4; if (a<=0){ B.prism.splice(k,1); continue; }
-        [['255,90,140',-1.5],['120,255,220',0],['120,140,255',1.5]].forEach(([c,o])=>{ const g=x.createLinearGradient(r.x,0,r.x+r.l,0); g.addColorStop(0,`rgba(${c},0)`); g.addColorStop(.5,`rgba(${c},${.5*a})`); g.addColorStop(1,`rgba(${c},0)`); x.fillStyle=g; x.fillRect(r.x+o*2,r.y+o,r.l,1.5); }); }
-      x.globalCompositeOperation='source-over';
-      // 꽃잎을 감싸는 유리 선
-      if (pa>0){ x.globalAlpha=pa*.6; x.strokeStyle='rgba(240,232,255,.8)'; x.lineWidth=1; x.fillStyle='#f6f0ff';
-        const pts=[0,1,2,3,4,5].map(k=>{ const a=k/6*Math.PI*2+u*.3, r=ps*(.52+.1*Math.sin(k*2.1)); return [pcx+Math.cos(a)*r*.75, pcy-(1-enter)*h*.4+Math.sin(a)*r]; });
-        x.beginPath(); pts.forEach((p,i)=>i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1])); x.closePath(); x.stroke(); pts.forEach(p=>{ x.beginPath(); x.arc(p[0],p[1],1.8,0,7); x.fill(); }); x.globalAlpha=1; }
-      // 4) 꽃잎이 보석으로: 스캔라인 보석이 꽃잎 자리에서 맺힘
-      if (u>.8){ const k=sm((u-.8)/.5), gs=side*lerp(.85,1,k); x.globalAlpha=k*(1-sm((u-1.45)/.4)); x.globalCompositeOperation='lighter';
-        x.drawImage(FM.scan,P[0]+.08*gs-gs/2+((Math.random()<.15&&k<1)?(Math.random()-.5)*10:0),P[1]-gs/2,gs,gs); x.globalCompositeOperation='source-over'; x.globalAlpha=1;
-        if (k>0&&k<1){ for (let n=0;n<6;n++){ const y=P[1]+(Math.random()-.5)*side*.8, bh=2+Math.random()*10; x.drawImage(film,0,y*dpr,w*dpr,bh*dpr,(Math.random()-.5)*40,y,w,bh); } } }
-      film.style.opacity=String(1-sm((u-1.35)/.5));
-      if (u>1.9){ I.stage='gem'; film.style.display='none'; film.style.opacity='1'; intro.classList.remove('walling'); I.idle=0; BR=null; }
-    }
-    if (BR){ x.globalAlpha=.9; x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
-      x.fillStyle='rgba(255,255,255,.05)'; for (let k=0;k<50;k++) x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5); }
+    const B=BR, H=B.H, hero=B.hero, TE=3.2;              // TE: 꽃잎이 바닥에 닿아 픽셀로 부서지는 순간
+    // 꽃잎 한 장의 움직임 (한 번도 끊기지 않는 하나의 낙하)
+    if (T<.9){ hero.x+=hero.vx*dt; hero.y+=hero.vy*dt; hero.vy+=140*dt; hero.rot+=hero.spin*dt; }
+    else { hero.vx*=Math.exp(-dt*2); hero.x+=hero.vx*dt; hero.vy=Math.min(hero.vy+620*dt, h*.62); hero.y+=hero.vy*dt;
+      hero.rot=lerp(hero.rot,-.1+Math.sin(T*3.6)*.14,1-Math.exp(-dt*2.2)); }
+    const zk=eio((T-.55)/1.0), Z=lerp(1,3.4,zk), fx=lerp(w/2,hero.x,zk), fy=lerp(h/2,hero.y,zk);
+    const spd=clamp((hero.vy*Z)/(h*1.6),0,1)*sm((T-1)/.6);
+    x.fillStyle='#050308'; x.fillRect(0,0,w,h);
+    x.save(); x.translate(w/2,h/2); x.scale(Z,Z); x.translate(-fx,-fy);
+    // 배경: 장미 장면 → 그 아래로 이어지는 흐린 숲 (카메라가 꽃잎을 따라 내려감)
+    const blurK=sm((T-.4)/.9), dh=h*B.sc, ir=FM.wide.width/FM.wide.height, dw=dh*ir, bx=(w-dw)/2+B.px, by=(h-dh)/2+B.py;
+    x.globalAlpha=1-blurK; x.drawImage(FM.wide,bx,by,dw,dh); x.globalAlpha=1; x.drawImage(FM.wideBlur,bx,by,dw,dh); x.globalAlpha=1;
+    if (blurK<1){ x.globalAlpha=1-blurK; x.drawImage(FM.wide,bx,by,dw,dh); x.globalAlpha=1; }
+    const vy0=fy-h/(2*Z), vy1=fy+h/(2*Z);
+    for (let k=1;k<200;k++){ const ty=by+k*dh; if (ty>vy1) break; if (ty+dh<vy0) continue;
+      x.save(); if (k%2){ x.translate(0,ty+dh); x.scale(1,-1); x.drawImage(FM.wideBlur,bx,0,dw,dh); } else x.drawImage(FM.wideBlur,bx,ty,dw,dh); x.restore(); }
+    // 꽃송이 자리가 흩어지며 비어 감
+    const gone=sm(T/.45)*(1-sm((T-2)/1)); if (gone>0){ const g=x.createRadialGradient(H[0],H[1],0,H[0],H[1],B.hr*1.6); g.addColorStop(0,`rgba(40,28,70,${gone*.85})`); g.addColorStop(1,'rgba(40,28,70,0)'); x.fillStyle=g; x.fillRect(H[0]-B.hr*2,H[1]-B.hr*2,B.hr*4,B.hr*4); }
+    x.fillStyle=`rgba(8,4,16,${.1+blurK*.42})`; x.fillRect(fx-w*2,fy-h*2,w*4,h*4);
+    // 그래픽처럼 깨지는 조각
+    for (const sd of B.shards){ const tt=T, a=clamp(1-tt*1.6,0,1); if (a<=0) continue;
+      x.save(); x.globalAlpha=a; x.translate(sd.mx+sd.vx*tt,sd.my+sd.vy*tt+300*tt*tt); x.rotate(sd.rot*tt); x.translate(-sd.mx,-sd.my);
+      x.beginPath(); x.moveTo(sd.t[0][0],sd.t[0][1]); x.lineTo(sd.t[1][0],sd.t[1][1]); x.lineTo(sd.t[2][0],sd.t[2][1]); x.closePath();
+      x.save(); x.clip(); x.drawImage(B.snap,0,0,w,h); x.restore(); x.strokeStyle='rgba(235,225,255,.7)'; x.lineWidth=1/Z; x.stroke(); x.restore(); }
+    // 픽셀 조각 · 프리즘 잔상
+    const PC=['216,190,255','190,160,245','236,222,255','170,140,235'];
+    const spawn=(p,sz,many)=>{ p.pt-=dt; if (p.pt<=0){ p.pt=many?.02:.04+Math.random()*.05;
+        for (let k=0;k<(many?3:2);k++) B.pix.push({x:p.x+(Math.random()-.5)*sz*.7, y:p.y+(Math.random()-.4)*sz*.5, s:Math.max(2,sz*(.03+Math.random()*.08)), vy:-(many?hero.vy*.55:0)+30+Math.random()*90, a:.75, c:PC[(Math.random()*4)|0], col:Math.random()<.4});
+        if (Math.random()<(many?.3:.18)) B.prism.push({x:p.x-sz*(.4+Math.random()*1.1), y:p.y+(Math.random()-.5)*sz*.6, l:sz*(1.4+Math.random()*3), t:0}); } };
+    for (const p of B.petals){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=260*dt; p.vx*=Math.exp(-dt*.6); p.rot+=p.spin*dt; if (T<1.7) spawn(p,p.s,false); }
+    if (T<TE) spawn(hero,hero.s,T>1.2);
+    for (let k=B.pix.length-1;k>=0;k--){ const q=B.pix[k]; q.y+=q.vy*dt; q.vy+=60*dt; q.a-=dt*.8; if (q.a<=0){ B.pix.splice(k,1); continue; }
+      const ss=q.s/Math.max(1,Z*.8); x.fillStyle=`rgba(${q.c},${q.a*.65})`; if (q.col) x.fillRect(q.x,q.y,ss*.7,ss*3.2); else x.fillRect(q.x,q.y,ss,ss); }
+    x.globalCompositeOperation='lighter';
+    for (let k=B.prism.length-1;k>=0;k--){ const r=B.prism[k]; r.t+=dt; const a=1-r.t/.42; if (a<=0){ B.prism.splice(k,1); continue; } const lw=Math.max(.6,1.4/Z);
+      [['255,90,140',-lw],['120,255,220',0],['120,140,255',lw]].forEach(([c,o])=>{ const g=x.createLinearGradient(r.x,0,r.x+r.l,0); g.addColorStop(0,`rgba(${c},0)`); g.addColorStop(.5,`rgba(${c},${.55*a})`); g.addColorStop(1,`rgba(${c},0)`); x.fillStyle=g; x.fillRect(r.x+o*2,r.y+o,r.l,lw); }); }
+    x.globalCompositeOperation='source-over';
+    for (const p of B.petals){ const a=clamp(T*5,0,1)*clamp(1.9-T,0,1); drawPetal(x,p.x,p.y,p.s*(.4+.6*clamp(T*3,0,1)),p.rot,a*(.7+.3/p.z),p.img); }
+    // 주인공 꽃잎: 작은 결정 꽃잎 → (다가가며) 큰 결정 꽃잎으로 자연스럽게 겹쳐 바뀜
+    const cf=sm((T-1.15)/.6), ha=1-sm((T-TE)/.25), hs=hero.s*clamp(T*4,0,1);
+    for (let k=4;k>=1;k--) drawPetal(x,hero.x,hero.y-k*hs*.17*spd,hs*1.15,hero.rot+k*.03,ha*.11*spd*cf,FM.petal);
+    drawPetal(x,hero.x,hero.y,hs,hero.rot,ha*(1-cf),hero.img);
+    drawPetal(x,hero.x,hero.y,hs*1.15,hero.rot,ha*cf,FM.petal);
+    x.restore();
+    // 낙하 속도감: 화면 빛줄기
+    if (spd>0){ x.globalCompositeOperation='lighter';
+      for (const st of B.streaks){ st.y-=st.sp*dt*spd; if (st.y<-st.l) st.y+=1+st.l; const X=st.x*w, Y=st.y*h, L=st.l*h*(.4+spd*.6);
+        const g=x.createLinearGradient(0,Y,0,Y+L); g.addColorStop(0,'rgba(200,170,255,0)'); g.addColorStop(1,`rgba(200,170,255,${st.a*spd})`); x.fillStyle=g; x.fillRect(X,Y,st.wd,L); }
+      x.globalCompositeOperation='source-over'; }
+    // 깨지는 순간 / 바닥에 닿는 순간의 글리치
+    const gl=T<.45? (.45-T)*30 : (T>TE-.05&&T<TE+.4? 10 : 0);
+    for (let n=0;n<Math.floor(gl);n++){ const y=Math.random()*h, bh=3+Math.random()*20; x.drawImage(film,0,y*dpr,w*dpr,bh*dpr,(Math.random()-.5)*60,y,w,bh);
+      x.globalCompositeOperation='lighter'; x.fillStyle=Math.random()<.5?'rgba(168,85,247,.16)':'rgba(125,211,252,.12)'; x.fillRect(0,y,w,Math.max(1,bh*.2)); x.globalCompositeOperation='source-over'; }
+    // 꽃잎이 픽셀로 부서져 바닥으로 → 3D 바닥 장면으로 이어짐
+    if (T>=TE && !B.burst){ B.burst=true; for (let k=0;k<90;k++) B.pix.push({x:hero.x+(Math.random()-.5)*hero.s, y:hero.y+(Math.random()-.5)*hero.s*.6, s:hero.s*(.02+Math.random()*.06), vy:hero.vy*(.6+Math.random()*.6), a:1, c:PC[(Math.random()*4)|0], col:Math.random()<.5}); startAssemble(); }
+    x.globalAlpha=.9; x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
+    x.fillStyle='rgba(255,255,255,.05)'; for (let k=0;k<50;k++) x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5);
+    film.style.opacity=String(1-sm((T-TE-.12)/.45));
+    if (T>TE+.6){ film.style.display='none'; film.style.opacity='1'; BR=null; }
+  }
+
+  /* ---------- 바닥에 흩어진 픽셀 → 각도를 돌리면 보석으로 보임 (QR 레퍼런스) ---------- */
+  const AS={t:-1}; window.__AS=AS; window.__cam=()=>[iCam.position.toArray(),AS.C0&&AS.C0.toArray(),AS.Ca&&AS.Ca.toArray()];
+  const floorTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=256; const g2=c.getContext('2d'), g=g2.createRadialGradient(128,128,10,128,128,128);
+    g.addColorStop(0,'rgba(60,40,105,.95)'); g.addColorStop(.55,'rgba(30,18,60,.75)'); g.addColorStop(1,'rgba(10,5,20,0)'); g2.fillStyle=g; g2.fillRect(0,0,256,256); return new THREE.CanvasTexture(c); })();
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:floorTex,transparent:true,depthWrite:false,opacity:0}));
+  floor.rotation.x=-Math.PI/2; floor.renderOrder=-1; floor.visible=false; iScene.add(floor);
+  function startAssemble(){
+    if (!VOX) return;
+    I.stage='assemble'; I.f=1; AS.t=0;
+    const sz=I.size||5; gem.scale.set(sz,sz,sz); gem.position.set(-GC[0]*sz*.3, I.gy, 0); gem.rotation.set(0,0,0); gem.updateMatrixWorld(true);
+    const Gc=gem.localToWorld(new THREE.Vector3(GC[0],0,0)); AS.Gc=Gc; AS.Yf=Gc.y-sz*.55;
+    AS.Ca=Gc.clone().add(new THREE.Vector3(0,3.4,9.3));
+    AS.C0=Gc.clone().add(new THREE.Vector3(.6,15,-4.5)); AS.L0=new THREE.Vector3(Gc.x,AS.Yf,Gc.z-7.5);
+    const Cl=gem.worldToLocal(AS.Ca.clone()), yl=(AS.Yf-gem.position.y)/sz, cs=1/VG;
+    for (const c of VOX.cells){ const zt=(c.lum-.35)*cs*9, Tt=new THREE.Vector3(c.u,c.v,zt);
+      const sR=(yl-Cl.y)/(Tt.y-Cl.y); c.as=sR; c.S=Cl.clone().add(Tt.clone().sub(Cl).multiplyScalar(sR)); c.Tt=Tt;
+      c.J=new THREE.Vector3((Math.random()-.5)*.9,0,(Math.random()-.5)*1.6); c.drop=(2+Math.random()*4); c.dd=Math.random()*.7; c.ld=(c.v+.5)*.35+Math.random()*.25; }
+    floor.position.set(Gc.x,AS.Yf-.01,Gc.z-6); floor.scale.set(sz*7,sz*7,1); floor.visible=true;
+    sparkles.forEach(sp=>sp.visible=false); setHint('');
+  }
+  const aq=new THREE.Quaternion(), am=new THREE.Matrix4(), ap=new THREE.Vector3(), asv=new THREE.Vector3();
+  function assembleStep(dt){
+    const t=(AS.t+=dt), sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, eio=v=>{ v=clamp(v,0,1); return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2; };
+    const sz=I.size||5, cs=1/VG, {im,cells}=VOX;
+    const orbit=eio((t-1.0)/1.8), lift=clamp((t-3.2)/1.3,0,1);
+    // 보석 자세: 정면 → (들어 올릴 때) 마우스 방향으로
+    gem.scale.set(sz,sz,sz); gem.position.set(-GC[0]*sz*.3 + I.mx*.2*sm(lift), I.gy, 0); gem.rotation.set(-I.my*.75*sm(lift), I.mx*1.05*sm(lift), 0);
+    // 카메라: 위에서 내려다봄 → 약 95° 돌아 보석이 맺히는 각도 → 보석 장면 카메라
+    const Cg=new THREE.Vector3(I.mx*.25,I.my*.15,10), Lg=new THREE.Vector3(0,0,0);
+    const C=AS.C0.clone().lerp(AS.Ca,orbit), L=AS.L0.clone().lerp(AS.Gc,orbit), lk=eio((t-3.2)/1.3);
+    C.lerp(Cg,lk); L.lerp(Lg,lk); iCam.position.copy(C); iCam.lookAt(L);
+    floor.material.opacity=sm(t/.4)*(1-sm((t-3.3)/.9));
+    im.visible=true;
+    for (let i=0;i<cells.length;i++){ const c=cells[i];
+      const fd=clamp((t-c.dd)/.55,0,1), dropY=c.drop*(1-fd*fd);
+      const kk=sm((lift*1.6-c.ld*.6)), sxy=cs*.94*lerp(c.as,1,kk), sdz=lerp(cs*.94*c.as, cs*(.35+c.th*1.5), kk);
+      const jit=1-sm(orbit*1.12); ap.copy(c.S).addScaledVector(c.J,jit).lerp(c.Tt,kk); ap.y+=dropY*(1-kk);
+      asv.set(sxy*(fd>0?1:0),sxy*(fd>0?1:0),sdz*(fd>0?1:0)); am.compose(ap,aq,asv); im.setMatrixAt(i,am); }
+    im.instanceMatrix.needsUpdate=true;
+    glow.material.opacity=sm((t-2.6)/.8);
+    if (t>4.6){ I.stage='gem'; floor.visible=false; sparkles.forEach(sp=>sp.visible=true); intro.classList.remove('walling'); I.idle=0; }
   }
 
   // 깨진 유리처럼: 금이 퍼지고 → 뾰족한 검은 조각들이 떨어져 나가며 본편이 드러남
@@ -1588,7 +1607,7 @@ if (!IR){
     I.mx=lerp(I.mx,tx,1-Math.exp(-dt*3)); I.my=lerp(I.my,ty,1-Math.exp(-dt*3));
     const sz=I.size||5;
     // 돌린 만큼 입체가 된다
-    const fT = I.broken? 1 : (I.stage!=='gem'? 0 : clamp((Math.hypot(I.mx*1.1,I.my*1.4)-.08)*1.9,0,1));
+    const fT = I.broken? 1 : I.stage==='assemble'? 1 : (I.stage!=='gem'? 0 : clamp((Math.hypot(I.mx*1.1,I.my*1.4)-.08)*1.9,0,1));
     I.f=lerp(I.f,fT,1-Math.exp(-dt*3.5));
     gem.scale.set(sz,sz,sz);
     // 어둠 속 둘러보기: 커서를 움직이면 공간이 움직이고, 숨은 보석이 가운데 빛으로 들어와야 찾음
@@ -1604,15 +1623,15 @@ if (!IR){
     iCam.position.set(I.mx*.25, I.my*.15, 10); iCam.lookAt(0,0,0);
     if (!I.broken){
       gemScreen();
-      if (I.stage==='break'||I.stage==='gem') drawBgCover();
+      if (I.stage==='break'||I.stage==='gem'||I.stage==='assemble') drawBgCover();
       if (I.stage!=='gem') wallStep(dt);
       const near=I.stage==='gem' && Math.hypot(M.px-I.sx,M.py-I.sy) < I.sr*1.15 && curEl.classList.contains('on');
       I.crack = I.stage!=='gem'? (I.found||0)*.7 : (near? Math.min(1,I.crack+dt*.5) : Math.max(0,I.crack-dt*.3));
-      placeVoxels(I.f,0);
+      if (I.stage==='assemble') assembleStep(dt); else placeVoxels(I.f,0);
       sparkles.forEach(sp=>{ const u=sp.userData; v3.set(u.u,u.v,.05).applyMatrix4(gem.matrixWorld); sp.position.copy(v3);
         const s=sz*u.sz*(.3+.7*Math.max(0,Math.sin(I.t*2+u.ph)))*(1+I.crack*.6)*(1-I.f*.6); sp.scale.set(s,s,1); });
       curEl.classList.toggle('hover',near); curEl.firstChild.textContent='TOUCH';
-      drawGlitch((.1+.9*I.crack)*(1-I.f*.7));
+      drawGlitch(I.stage==='assemble'?0:(.1+.9*I.crack)*(1-I.f*.7));
     } else {
       I.bt+=dt; placeVoxels(1,I.bt); updateDust(I.bt); drawCover(I.bt);
       sparkles.forEach(sp=>sp.visible=false); glow.material.opacity=clamp(1-I.bt,0,1);
