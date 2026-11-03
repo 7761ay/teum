@@ -680,8 +680,8 @@ const draws={
     for (let i=0;i<L;i++){ const xc=lerp(xa,xb,(i+.5)/L); x.strokeStyle='rgba(233,222,255,.45)'; x.lineWidth=1.5; x.beginPath(); x.arc(xc,y1,PPU*.07,0,7); x.stroke(); }
     x.font=mono(PPU*.1); x.fillStyle=MUTE; x.fillText('TRACK',PPU*.18,H-PPU*.22); x.textAlign='right'; x.fillText(`${Math.round(60/STEP/2)} BPM`,W-PPU*.18,H-PPU*.22); x.textAlign='left';
   },
-  keys(x,W,H){
-    x.fillStyle=PAPER; x.fillRect(0,0,W,H); x.strokeStyle='rgba(233,222,255,.28)'; x.lineWidth=2; x.strokeRect(1,1,W-2,H-2);
+  keys(x,W,H,float){
+    if (!float){ x.fillStyle=PAPER; x.fillRect(0,0,W,H); x.strokeStyle='rgba(233,222,255,.28)'; x.lineWidth=2; x.strokeRect(1,1,W-2,H-2); } else x.clearRect(0,0,W,H);
     const list=[]; const last=S.notes.slice(-1)[0]; if (last) list.push({n:last.n,cur:true});
     upcoming(12).forEach(u=>list.push({n:u.n}));
     const rows=2, perRow=6, pad=PPU*.12, tw=(W-pad*2)/perRow, th=(H-pad*2)/rows;
@@ -689,6 +689,7 @@ const draws={
       x.strokeStyle='rgba(233,222,255,.35)'; x.lineWidth=1.5;
       const isCur = it&&it.cur; let fill='#2a2142', fg=INK;
       if (it && !it.n.rest){ if (isCur){ fill=it.n.gap?AMBER:(it.n.lead?TEAL:'#6d28d9'); fg=it.n.gap?'#0b0812':'#fff'; } else if (it.n.lead && i%3===0){ fill='rgba(232,121,249,.75)'; fg='#fff'; } }
+      if (!float){ x.save(); x.filter='blur('+Math.round(PPU*.04)+'px)'; x.fillStyle=isCur?'rgba(139,92,246,.5)':'rgba(5,3,10,.45)'; roundRect(x,px+PPU*.09,py+PPU*.12,tw-6,th-6,PPU*.05); x.fill(); x.restore(); continue; }
       x.fillStyle=fill; roundRect(x,px+3,py+3,tw-6,th-6,PPU*.05); x.fill(); x.stroke();
       if (it){ x.fillStyle=fg; x.font=mono(PPU*.14,600); x.textAlign='center'; x.textBaseline='middle';
         x.fillText(it.n.rest?'—':it.n.noise?'✕':noteName(it.n.midi),px+tw/2,py+th/2); x.textAlign='left'; }
@@ -704,21 +705,22 @@ const draws={
     const R=Math.min(W,H)*.3; x.save(); x.filter='blur('+Math.round(R*.08)+'px)'; x.strokeStyle='rgba(5,3,10,.3)'; x.lineWidth=R*.3; x.beginPath(); x.arc(W/2+R*.25,H/2+R*.25,R*.6,0,7); x.stroke(); x.restore();
     x.strokeStyle='rgba(233,222,255,.28)'; x.lineWidth=2; x.strokeRect(1,1,W-2,H-2);
   },
-  glyph(x,W,H){
-    x.fillStyle='#1d1631'; x.fillRect(0,0,W,H);
+  glyph(x,W,H,float){
     const t=S.now;
-    [[BLUE,.3,.35],[TEAL,.65,.6],[BLUE,.4,.8]].forEach(([c,u,v],i)=>{ const px=W*(u+Math.sin(t*.4+i)*.12), py=H*(v+Math.cos(t*.3+i)*.08), r=W*.45;
+    if (float) x.clearRect(0,0,W,H); else { x.fillStyle='#1d1631'; x.fillRect(0,0,W,H); }
+    if (!float) [[BLUE,.3,.35],[TEAL,.65,.6],[BLUE,.4,.8]].forEach(([c,u,v],i)=>{ const px=W*(u+Math.sin(t*.4+i)*.12), py=H*(v+Math.cos(t*.3+i)*.08), r=W*.45;
       const g=x.createRadialGradient(px,py,0,px,py,r); g.addColorStop(0,c==BLUE?'rgba(139,92,246,.28)':'rgba(232,121,249,.28)'); g.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=g; x.fillRect(0,0,W,H); });
     const recent=S.notes.slice(-11), syms=[' ','·',':','–','=','┃'], cols=8, rows=Math.floor((H-PPU*.5)/(PPU*.2));
-    x.font=mono(PPU*.16,600); x.fillStyle=INK; x.textBaseline='top';
+    x.font=mono(PPU*.16,600); x.fillStyle=float?INK:'rgba(5,3,10,.55)'; x.textBaseline='top';
+    if (!float){ x.save(); x.filter='blur('+Math.round(PPU*.025)+'px)'; x.translate(PPU*.06,PPU*.08); }
     for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
       const n=recent[(r+c)%Math.max(1,recent.length)]; const pc=n&&n.n.pc!=null?n.n.pc:0;
       const k = S.gapActive? (c%2?1:0) : (pc+c*2+r+Math.floor(t*S.chaos*6))%syms.length;
       x.fillText(syms[k],PPU*.12+c*(W-PPU*.24)/cols,PPU*.15+r*PPU*.2);
     }
+    if (!float){ x.restore(); x.strokeStyle='rgba(233,222,255,.28)'; x.lineWidth=2; x.strokeRect(1,1,W-2,H-2); return; }
     let code=''; for (let i=0;i<11;i++){ const e=recent[i]; code+= !e?'0' : (e.n.hard||e.n.noise)?'X':'0'; }
     x.font=mono(PPU*.17,600); x.fillStyle=S.gapActive?AMBER:BLUE; x.fillText(code,PPU*.12,H-PPU*.3);
-    x.strokeStyle='rgba(233,222,255,.28)'; x.lineWidth=2; x.strokeRect(1,1,W-2,H-2);
   }
 };
 function roundRect(x,a,b,w,h,r){ x.beginPath(); x.moveTo(a+r,b); x.arcTo(a+w,b,a+w,b+h,r); x.arcTo(a+w,b+h,a,b+h,r); x.arcTo(a,b+h,a,b,r); x.arcTo(a,b,a+w,b,r); x.closePath(); }
@@ -823,6 +825,26 @@ function makeBars3D(p){
     bl.count=k; im.instanceMatrix.needsUpdate=bl.instanceMatrix.needsUpdate=true; if (im.instanceColor) im.instanceColor.needsUpdate=true; if (bl.instanceColor) bl.instanceColor.needsUpdate=true;
   }};
 }
+function makeFloatLayer(p,draw,zf,every){
+  const c=document.createElement('canvas'), tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,side:THREE.DoubleSide}));
+  m.renderOrder=3; p.xg.add(m); let n=0;
+  return {update(d){
+    if (c.width!==p.canvas.width||c.height!==p.canvas.height){ c.width=p.canvas.width; c.height=p.canvas.height; }
+    m.scale.set(p.w,p.h,1); m.position.z=zf(d);
+    if ((n++)%(every||1)===0){ draw(c.getContext('2d'),c.width,c.height,true); tex.needsUpdate=true; }
+  }};
+}
+function makeKeyBlocks(p){   // 음 타일 아래 기둥: 떠 있는 타일과 블록을 이어 주는 두께
+  const N=12, im=new THREE.InstancedMesh(boxGeo,new THREE.MeshStandardMaterial({color:0x5b44a8,roughness:.4,emissive:0x2a1a5e,emissiveIntensity:.5,transparent:true,opacity:.85}),N); im.frustumCulled=false; p.xg.add(im);
+  const m=new THREE.Matrix4(), q=new THREE.Quaternion();
+  return {update(d){
+    const pad=.12, tw=(p.w-pad*2)/6, th=(p.h-pad*2)/2, top=LIFT*.7+d*.3;
+    for (let i=0;i<N;i++){ const r=Math.floor(i/6), c=i%6, x=-p.w/2+pad+c*tw+tw/2, y=p.h/2-pad-r*th-th/2;
+      m.compose(new THREE.Vector3(x,y,top/2),q,new THREE.Vector3(tw*.86,th*.84,top)); im.setMatrixAt(i,m); }
+    im.instanceMatrix.needsUpdate=true;
+  }};
+}
 function makeScatter3D(p){
   const N=90, im=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.3,emissive:0x2a1060,emissiveIntensity:.35}),N); im.frustumCulled=false; p.xg.add(im);
   const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*6),3));
@@ -866,6 +888,8 @@ function buildPanels(){
     P.roll.extras.push(makeRollVoxels(P.roll)); P.spec.extras.push(makeSpecTowers(P.spec));
     P.dots.extras.push(makeDotSpheres(P.dots)); P.scope.extras.push(makeScopeRibbon(P.scope));
     P.wave.extras.push(makeWave3D(P.wave)); P.orbit.extras.push(makeOrbit3D(P.orbit)); P.text.extras.push(makeTextLayer(P.text)); P.radial.extras.push(makeScatter3D(P.radial)); P.bars.extras.push(makeBars3D(P.bars));
+    P.keys.extras.push(makeKeyBlocks(P.keys)); P.keys.extras.push(makeFloatLayer(P.keys,draws.keys,d=>LIFT*.7+d*.3+.005));
+    P.glyph.extras.push(makeFloatLayer(P.glyph,draws.glyph,d=>LIFT*.6+d*.35,2));
   }
   sky.scale.set(BW+5,BH+4,1);
 }
