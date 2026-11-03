@@ -1423,13 +1423,13 @@ if (!IR){
   function drawBreak(dt){
     const w=innerWidth, h=innerHeight, x=fctx, dpr=FM.dpr, T=(BR.t+=dt); x.setTransform(dpr,0,0,dpr,0,0);
     const sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, eio=v=>{ v=clamp(v,0,1); return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2; };
-    const B=BR, H=B.H, hero=B.hero, TE=3.2;              // TE: 꽃잎이 바닥에 닿아 픽셀로 부서지는 순간
+    const B=BR, H=B.H, hero=B.hero, TE=2.3;              // TE: 꽃잎이 바닥에 닿아 픽셀로 부서지는 순간
     // 꽃잎 한 장의 움직임 (한 번도 끊기지 않는 하나의 낙하)
     if (T<.9){ hero.x+=hero.vx*dt; hero.y+=hero.vy*dt; hero.vy+=140*dt; hero.rot+=hero.spin*dt; }
-    else { hero.vx*=Math.exp(-dt*2); hero.x+=hero.vx*dt; hero.vy=Math.min(hero.vy+620*dt, h*.62); hero.y+=hero.vy*dt;
+    else { hero.vx*=Math.exp(-dt*2); hero.x+=hero.vx*dt; hero.vy=Math.min(hero.vy+900*dt, h*.62); hero.y+=hero.vy*dt;
       hero.rot=lerp(hero.rot,-.1+Math.sin(T*3.6)*.14,1-Math.exp(-dt*2.2)); }
-    const zk=eio((T-.55)/1.0), Z=lerp(1,3.4,zk), fx=lerp(w/2,hero.x,zk), fy=lerp(h/2,hero.y,zk);
-    const spd=clamp((hero.vy*Z)/(h*1.6),0,1)*sm((T-1)/.6);
+    const zk=eio((T-.45)/.8), Z=lerp(1,3.4,zk), fx=lerp(w/2,hero.x,zk), fy=lerp(h/2,hero.y,zk);
+    const spd=clamp((hero.vy*Z)/(h*1.6),0,1)*sm((T-.9)/.45);
     x.fillStyle='#050308'; x.fillRect(0,0,w,h);
     x.save(); x.translate(w/2,h/2); x.scale(Z,Z); x.translate(-fx,-fy);
     // 배경: 장미 장면 → 그 아래로 이어지는 흐린 숲 (카메라가 꽃잎을 따라 내려감)
@@ -1469,7 +1469,7 @@ if (!IR){
     x.globalCompositeOperation='source-over';
     for (const p of B.petals){ const a=clamp(T*5,0,1)*clamp(1.9-T,0,1); drawPetal(x,p.x,p.y,p.s*(.4+.6*clamp(T*3,0,1)),p.rot,a*(.7+.3/p.z),p.img); }
     // 주인공 꽃잎: 작은 결정 꽃잎 → (다가가며) 큰 결정 꽃잎으로 자연스럽게 겹쳐 바뀜
-    const cf=sm((T-1.15)/.6), ha=1-sm((T-TE)/.25), hs=hero.s*clamp(T*4,0,1);
+    const cf=sm((T-.95)/.5), ha=1-sm((T-TE)/.25), hs=hero.s*clamp(T*4,0,1);
     for (let k=4;k>=1;k--) drawPetal(x,hero.x,hero.y-k*hs*.17*spd,hs*1.15,hero.rot+k*.03,ha*.11*spd*cf,FM.petal);
     drawPetal(x,hero.x,hero.y,hs,hero.rot,ha*(1-cf),hero.img);
     drawPetal(x,hero.x,hero.y,hs*1.15,hero.rot,ha*cf,FM.petal);
