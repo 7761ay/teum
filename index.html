@@ -1499,7 +1499,7 @@ if (!IR){
   floor.rotation.x=-Math.PI/2; floor.renderOrder=-1; floor.visible=false; iScene.add(floor);
   function startAssemble(){
     if (!VOX) return;
-    I.stage='assemble'; I.f=1; AS.t=0;
+    I.stage='assemble'; I.f=1; AS.t=0; AS.og=0; AS.ov=0; AS.ls=-1; AS.drag=null;
     const sz=I.size||5; gem.scale.set(sz,sz,sz); gem.position.set(-GC[0]*sz*.3, I.gy, 0); gem.rotation.set(0,0,0); gem.updateMatrixWorld(true);
     const Gc=gem.localToWorld(new THREE.Vector3(GC[0],0,0)); AS.Gc=Gc; AS.Yf=Gc.y-sz*.55;
     AS.Ca=Gc.clone().add(new THREE.Vector3(0,3.4,9.3));
@@ -1507,22 +1507,31 @@ if (!IR){
     const Cl=gem.worldToLocal(AS.Ca.clone()), yl=(AS.Yf-gem.position.y)/sz, cs=1/VG;
     for (const c of VOX.cells){ const zt=(c.lum-.35)*cs*9, Tt=new THREE.Vector3(c.u,c.v,zt);
       const sR=(yl-Cl.y)/(Tt.y-Cl.y); c.as=sR; c.S=Cl.clone().add(Tt.clone().sub(Cl).multiplyScalar(sR)); c.Tt=Tt;
-      c.J=new THREE.Vector3((Math.random()-.5)*.9,0,(Math.random()-.5)*1.6); c.drop=(2+Math.random()*4); c.dd=Math.random()*.7; c.ld=(c.v+.5)*.35+Math.random()*.25; }
+      c.J=new THREE.Vector3((Math.random()-.5)*.9,0,(Math.random()-.5)*1.6); c.drop=(.5+Math.random()*1.3); c.dd=Math.random()*.7; c.ld=(c.v+.5)*.35+Math.random()*.25; }
     floor.position.set(Gc.x,AS.Yf-.01,Gc.z-6); floor.scale.set(sz*7,sz*7,1); floor.visible=true;
     sparkles.forEach(sp=>sp.visible=false); setHint('');
   }
+  intro.addEventListener('pointerdown',e=>{ if (I.stage==='assemble' && AS.t>1.0 && AS.ls<0){ AS.drag={y:e.clientY,id:e.pointerId}; try{intro.setPointerCapture(e.pointerId);}catch(_){} } });
+  intro.addEventListener('pointermove',e=>{ if (!AS.drag||e.pointerId!==AS.drag.id) return; const d=(AS.drag.y-e.clientY)/(innerHeight*.55); AS.drag.y=e.clientY; AS.og=clamp(AS.og+d,0,1); I.idle=0; });
+  const endDrag=()=>{ AS.drag=null; }; intro.addEventListener('pointerup',endDrag); intro.addEventListener('pointercancel',endDrag);
   const aq=new THREE.Quaternion(), am=new THREE.Matrix4(), ap=new THREE.Vector3(), asv=new THREE.Vector3();
   function assembleStep(dt){
     const t=(AS.t+=dt), sm=v=>{ v=clamp(v,0,1); return v*v*(3-2*v); }, eio=v=>{ v=clamp(v,0,1); return v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2; };
     const sz=I.size||5, cs=1/VG, {im,cells}=VOX;
-    const orbit=eio((t-1.0)/1.8), lift=clamp((t-3.2)/1.3,0,1);
+    // 픽셀이 다 떨어지면: 눌러서 위로 끌어올린 만큼 각도가 돌아감 (오래 두면 저절로)
+    if (t>1.0 && AS.ls<0){ setHint('픽셀을 눌러 위로 끌어올려 보세요');
+      if (I.idle>9) AS.og=Math.min(1,AS.og+dt*.5);
+      if (AS.og>=1){ AS.ls=t+.45; setHint(''); } }
+    AS.ov=lerp(AS.ov,AS.og,1-Math.exp(-dt*5));
+    const orbit=eio(AS.ov), lift=AS.ls<0?0:clamp((t-AS.ls)/1.3,0,1);
+    curEl.classList.toggle('hover', t>1.0 && AS.ls<0); if (t>1.0 && AS.ls<0) curEl.firstChild.textContent='LIFT';
     // 보석 자세: 정면 → (들어 올릴 때) 마우스 방향으로
     gem.scale.set(sz,sz,sz); gem.position.set(-GC[0]*sz*.3 + I.mx*.2*sm(lift), I.gy, 0); gem.rotation.set(-I.my*.75*sm(lift), I.mx*1.05*sm(lift), 0);
     // 카메라: 위에서 내려다봄 → 약 95° 돌아 보석이 맺히는 각도 → 보석 장면 카메라
     const Cg=new THREE.Vector3(I.mx*.25,I.my*.15,10), Lg=new THREE.Vector3(0,0,0);
-    const C=AS.C0.clone().lerp(AS.Ca,orbit), L=AS.L0.clone().lerp(AS.Gc,orbit), lk=eio((t-3.2)/1.3);
+    const C=AS.C0.clone().lerp(AS.Ca,orbit), L=AS.L0.clone().lerp(AS.Gc,orbit), lk=AS.ls<0?0:eio((t-AS.ls)/1.3);
     C.lerp(Cg,lk); L.lerp(Lg,lk); iCam.position.copy(C); iCam.lookAt(L);
-    floor.material.opacity=sm(t/.4)*(1-sm((t-3.3)/.9));
+    floor.material.opacity=sm(t/.4)*(AS.ls<0?1:1-sm((t-AS.ls-.1)/.9));
     im.visible=true;
     for (let i=0;i<cells.length;i++){ const c=cells[i];
       const fd=clamp((t-c.dd)/.55,0,1), dropY=c.drop*(1-fd*fd);
@@ -1530,8 +1539,8 @@ if (!IR){
       const jit=1-sm(orbit*1.12); ap.copy(c.S).addScaledVector(c.J,jit).lerp(c.Tt,kk); ap.y+=dropY*(1-kk);
       asv.set(sxy*(fd>0?1:0),sxy*(fd>0?1:0),sdz*(fd>0?1:0)); am.compose(ap,aq,asv); im.setMatrixAt(i,am); }
     im.instanceMatrix.needsUpdate=true;
-    glow.material.opacity=sm((t-2.6)/.8);
-    if (t>4.6){ I.stage='gem'; floor.visible=false; sparkles.forEach(sp=>sp.visible=true); intro.classList.remove('walling'); I.idle=0; }
+    glow.material.opacity=sm((AS.ov-.75)/.25);
+    if (AS.ls>0 && t>AS.ls+1.4){ curEl.firstChild.textContent='TOUCH'; I.stage='gem'; floor.visible=false; sparkles.forEach(sp=>sp.visible=true); intro.classList.remove('walling'); I.idle=0; }
   }
 
   // 깨진 유리처럼: 금이 퍼지고 → 뾰족한 검은 조각들이 떨어져 나가며 본편이 드러남
