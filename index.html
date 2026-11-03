@@ -672,12 +672,12 @@ const draws={
     const ups = S.gapActive?[]:upcoming(14);
     for (const u of ups.reverse()){ if (u.n.rest) continue; const z=(u.t-S.now)/(STEP*14); if (z<0) continue; const s=1/(1+z*6), lane=(u.n.noise?3:u.n.pc%7);
       const xc=lerp(xa,xb,(lane+.5)/L), xx=vx+(xc-vx)*s, yy=y0+(y1-y0)*s, ww=(xb-xa)/L*.62*s, hh=Math.max(2,H*.025*s);
-      x.fillStyle=u.n.noise?'#fb7185':(u.n.lead?TEAL:BLUE); x.globalAlpha=.4+.6*s; x.fillRect(xx-ww/2,yy-hh/2,ww,hh); x.globalAlpha=1; }
+      x.fillStyle='rgba(5,3,10,.35)'; x.globalAlpha=.3+.7*s; x.fillRect(xx-ww/2+PPU*.03,yy-hh/2+PPU*.04,ww,hh*1.4); x.globalAlpha=1; }   // 블록은 3D로 떠 있음
     const last=S.notes[S.notes.length-1];
     if (last && S.now-last.t<.35 && !last.n.rest){ const lane=(last.n.noise?3:last.n.pc%7), xc=lerp(xa,xb,(lane+.5)/L), a=1-(S.now-last.t)/.35;
       const g=x.createLinearGradient(0,y0,0,y1); g.addColorStop(0,'rgba(139,92,246,0)'); g.addColorStop(1,`rgba(139,92,246,${.5*a})`); x.fillStyle=last.n.gap?`rgba(139,227,255,${.6*a})`:g;
       x.beginPath(); x.moveTo(vx+(xc-vx)*.18-6,y0+(y1-y0)*.18); x.lineTo(vx+(xc-vx)*.18+6,y0+(y1-y0)*.18); x.lineTo(xc+W*.05,y1); x.lineTo(xc-W*.05,y1); x.fill(); }
-    for (let i=0;i<L;i++){ const xc=lerp(xa,xb,(i+.5)/L); x.strokeStyle='rgba(233,222,255,.45)'; x.lineWidth=1.5; x.beginPath(); x.arc(xc,y1,PPU*.07,0,7); x.stroke(); }
+    for (let i=0;i<L;i++){ const xc=lerp(xa,xb,(i+.5)/L); x.strokeStyle='rgba(233,222,255,.15)'; x.lineWidth=1.5; x.beginPath(); x.arc(xc,y1,PPU*.07,0,7); x.stroke(); }
     x.font=mono(PPU*.1); x.fillStyle=MUTE; x.fillText('TRACK',PPU*.18,H-PPU*.22); x.textAlign='right'; x.fillText(`${Math.round(60/STEP/2)} BPM`,W-PPU*.18,H-PPU*.22); x.textAlign='left';
   },
   keys(x,W,H,float){
@@ -845,6 +845,24 @@ function makeKeyBlocks(p){   // 음 타일 아래 기둥: 떠 있는 타일과 �
     im.instanceMatrix.needsUpdate=true;
   }};
 }
+function makeLane3D(p){   // 리듬 레인: 내려오는 블록이 떠 있는 입체 블록, 가까워질수록 크고 높게
+  const N=16, im=new THREE.InstancedMesh(boxGeo,floatMat,N); im.frustumCulled=false; p.xg.add(im);
+  const rg=new THREE.InstancedMesh(new THREE.TorusGeometry(1,.18,6,24),new THREE.MeshBasicMaterial({color:0xd8c8ff}),7); rg.frustumCulled=false; p.xg.add(rg);
+  const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color();
+  return {update(d){
+    const W=p.w, H=p.h, X=v=>v*W-W/2, Y=v=>H/2-v*H, y0=.22, y1=.84, L=7, xa=.06, xb=.94, vx=.5, base=LIFT*.4+d*.25;
+    const ups=window.__fakeUps? window.__fakeUps() : (S.gapActive?[]:upcoming(14)); let k=0;
+    for (const u of ups){ if (u.n.rest||k>=N) continue; const z=(u.t-S.now)/(STEP*14); if (z<0) continue;
+      const s=1/(1+z*6), lane=(u.n.noise?3:u.n.pc%7), xc=lerp(xa,xb,(lane+.5)/L), xx=vx+(xc-vx)*s, yy=y0+(y1-y0)*s;
+      const ww=(xb-xa)/L*.62*s*W, hh=Math.max(.02,.03*s*H*1.4), dz=.04+s*(.18+d*.25)+(u.n.jong?.06:0);
+      m.compose(new THREE.Vector3(X(xx),Y(yy),base+dz/2+s*.15),q,new THREE.Vector3(ww,hh,dz)); im.setMatrixAt(k,m);
+      col.set(u.n.noise?'#fb7185':(u.n.lead?TEAL:BLUE)); col.lerp(new THREE.Color(0xffffff),s*.35); im.setColorAt(k,col); k++; }
+    im.count=k; im.instanceMatrix.needsUpdate=true; if (im.instanceColor) im.instanceColor.needsUpdate=true;
+    const last=S.notes[S.notes.length-1], hit=last&&!last.n.rest? Math.max(0,1-(S.now-last.t)/.35):0, hl=last&&!last.n.rest?(last.n.noise?3:last.n.pc%7):-1;
+    for (let i=0;i<L;i++){ const r=.07*(1+(i===hl?hit*.6:0)); m.compose(new THREE.Vector3(X(lerp(xa,xb,(i+.5)/L)),Y(y1),base+.12+(i===hl?hit*.25:0)),q,new THREE.Vector3(r,r,r)); rg.setMatrixAt(i,m); }
+    rg.instanceMatrix.needsUpdate=true;
+  }};
+}
 function makeScatter3D(p){
   const N=90, im=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.3,emissive:0x2a1060,emissiveIntensity:.35}),N); im.frustumCulled=false; p.xg.add(im);
   const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*6),3));
@@ -888,6 +906,7 @@ function buildPanels(){
     P.roll.extras.push(makeRollVoxels(P.roll)); P.spec.extras.push(makeSpecTowers(P.spec));
     P.dots.extras.push(makeDotSpheres(P.dots)); P.scope.extras.push(makeScopeRibbon(P.scope));
     P.wave.extras.push(makeWave3D(P.wave)); P.orbit.extras.push(makeOrbit3D(P.orbit)); P.text.extras.push(makeTextLayer(P.text)); P.radial.extras.push(makeScatter3D(P.radial)); P.bars.extras.push(makeBars3D(P.bars));
+    P.lane.extras.push(makeLane3D(P.lane));
     P.keys.extras.push(makeKeyBlocks(P.keys)); P.keys.extras.push(makeFloatLayer(P.keys,draws.keys,d=>LIFT*.7+d*.3+.005));
     P.glyph.extras.push(makeFloatLayer(P.glyph,draws.glyph,d=>LIFT*.6+d*.35,2));
   }
