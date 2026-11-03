@@ -638,15 +638,13 @@ const draws={
       else if (v>.12){ x.fillStyle=col; x.beginPath(); x.arc(cx,cy,R*.14,0,7); x.fill(); }
     }
   },
-  bars(x,W,H){
+  bars(x,W,H){   // 막대·블록은 3D로 솟아오름 — 바닥엔 눈금과 그림자만
     frame(x,W,H);
-    const N=60, bw=W/N, mid=H*.36, hist=S.rmsHist;
-    for (let i=0;i<N;i++){ const v=hist[(S.rmsPtr-N+i+hist.length)%hist.length]; const h=clamp(v*3.2,0,1)*H*.3+2;
-      x.fillStyle= i%3===0?TEAL:'rgba(232,121,249,.45)'; x.fillRect(i*bw+bw*.2,mid-h,bw*.6,h*2); }
-    x.fillStyle='#e9d5ff'; x.fillRect(W/2-2,H*.1,4,H*.82);
-    // 아래쪽 미니 블록
-    const lst=S.notes.slice(-28);
-    lst.forEach((e,i)=>{ const yy=H*.62+((e.n.midi||60)%24)/24*H*.32, xx=(i/28)*W; x.fillStyle=e.n.gap?AMBER:(e.n.lead?TEAL:'rgba(233,222,255,.25)'); x.fillRect(xx,yy,W/28*.7,H*.03); });
+    const N=30, bw=W/N, mid=H*.36;
+    x.strokeStyle='rgba(233,222,255,.08)'; x.lineWidth=1; for (let i=0;i<=N;i+=3){ x.beginPath(); x.moveTo(i*bw,H*.06); x.lineTo(i*bw,H*.58); x.stroke(); }
+    x.fillStyle='rgba(233,222,255,.18)'; x.fillRect(0,mid,W,1.5); x.fillRect(W/2-1,H*.1,2,H*.82);
+    x.fillStyle='rgba(5,3,10,.3)'; for (let i=0;i<N;i++){ const v=S.rmsHist[(S.rmsPtr-N+i+S.rmsHist.length)%S.rmsHist.length]; const hh=clamp(v*3.2,0,1)*H*.3+2; x.fillRect(i*bw+bw*.3,mid-hh+PPU*.04,bw*.6,hh*2); }
+    x.strokeStyle='rgba(233,222,255,.06)'; for (let k=0;k<4;k++){ const yy=H*.62+k*H*.09; x.beginPath(); x.moveTo(0,yy); x.lineTo(W,yy); x.stroke(); }
   },
   radial(x,W,H){   // 산포도: 가로 = 시간(최근 8초), 세로 = 음높이, 점은 위에 떠 있음
     frame(x,W,H,'SCATTER — 음 × 시간');
@@ -655,13 +653,13 @@ const draws={
     const L=PPU*.32, R2=W-PPU*.12, T=PPU*.12+PPU*.2, B=H-PPU*.22;
     x.strokeStyle='rgba(233,222,255,.08)'; x.lineWidth=1;
     for (let i=0;i<=8;i++){ const xx=lerp(L,R2,i/8); x.beginPath(); x.moveTo(xx,T); x.lineTo(xx,B); x.stroke(); }
-    for (let m=36;m<=84;m+=6){ const yy=lerp(B,T,(m-36)/48); x.beginPath(); x.moveTo(L,yy); x.lineTo(R2,yy); x.stroke(); if (m%12===0){ x.fillStyle=MUTE; x.font=mono(PPU*.09); x.fillText('C'+(m/12-1),PPU*.06,yy); } }
+    ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'].forEach((nm,i)=>{ const yy=lerp(B,T,(i+.5)/12); x.beginPath(); x.moveTo(L,yy); x.lineTo(R2,yy); x.stroke(); if (nm.length<2){ x.fillStyle=MUTE; x.font=mono(PPU*.09); x.fillText(nm,PPU*.1,yy); } });
     x.strokeStyle='rgba(233,222,255,.35)'; x.beginPath(); x.moveTo(L,T); x.lineTo(L,B); x.lineTo(R2,B); x.stroke();
     x.fillStyle=MUTE; x.font=mono(PPU*.09); x.textAlign='right'; x.fillText('NOW',R2,B+PPU*.1); x.textAlign='left'; x.fillText('-8s',L,B+PPU*.1);
     // 점들의 그림자 (점은 3D로 떠 있음)
     const notes=S.notes.slice(-90); x.fillStyle='rgba(5,3,10,.35)';
     for (const e of notes){ if (e.n.rest||e.n.midi==null) continue; const age=S.now-e.t; if (age<0||age>8) continue;
-      x.beginPath(); x.arc(lerp(R2,L,age/8)+PPU*.04,lerp(B,T,(clamp(e.n.midi,36,84)-36)/48)+PPU*.05,PPU*.04,0,7); x.fill(); }
+      x.beginPath(); x.arc(lerp(R2,L,age/8)+PPU*.04,lerp(B,T,scatY(e.n.midi))+PPU*.05,PPU*.04,0,7); x.fill(); }
   },
   lane(x,W,H){
     frame(x,W,H);
@@ -797,6 +795,7 @@ function makeDotSpheres(p){
     im.instanceMatrix.needsUpdate=true; im.instanceColor.needsUpdate=true;
   }};
 }
+const scatY=m=>clamp(((m%12)+.5)/12 + (Math.floor(m/12)-5)*.035,.02,.98);   // 음이름(C~B)별로 높이, 옥타브는 살짝 위아래
 function makeTextLayer(p){
   const c=document.createElement('canvas'), tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
   const m=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,side:THREE.DoubleSide}));
@@ -808,6 +807,22 @@ function makeTextLayer(p){
     if (key!==last){ last=key; draws.text(c.getContext('2d'),c.width,c.height,true); tex.needsUpdate=true; }
   }};
 }
+function makeBars3D(p){
+  const N=30, im=new THREE.InstancedMesh(boxGeo,floatMat,N), bl=new THREE.InstancedMesh(boxGeo,floatMat,28); im.frustumCulled=bl.frustumCulled=false; p.xg.add(im); p.xg.add(bl);
+  const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color();
+  return {update(d){
+    const bw=p.w/N, mid=p.h/2-p.h*.36, hist=S.rmsHist;
+    for (let i=0;i<N;i++){ const v=hist[(S.rmsPtr-N+i+hist.length)%hist.length], hh=clamp(v*3.2,0,1)*p.h*.6+.02, dz=.05+v*(1.2+d*1.4);
+      m.compose(new THREE.Vector3(-p.w/2+i*bw+bw*.5,mid,LIFT*.35+dz/2),q,new THREE.Vector3(bw*.6,hh,dz)); im.setMatrixAt(i,m);
+      col.set(i%3===0?TEAL:'#c4b5fd'); col.lerp(new THREE.Color(0xffffff),clamp(v*3,0,.6)); im.setColorAt(i,col); }
+    const lst=S.notes.slice(-28); let k=0;
+    lst.forEach((e,i)=>{ if (e.n.midi==null) return; const age=S.now-e.t, fresh=Math.exp(-age*2);
+      const yy=p.h/2-(p.h*.62+((e.n.midi)%24)/24*p.h*.32), xx=-p.w/2+(i/28)*p.w+p.w/56, hz=.06+fresh*.5+(e.n.jong?.12:0);
+      m.compose(new THREE.Vector3(xx,yy,LIFT*.45+hz/2+d*.2),q,new THREE.Vector3(p.w/28*.7,p.h*.035,hz)); bl.setMatrixAt(k,m);
+      col.set(e.n.gap?AMBER:(e.n.lead?TEAL:'#a78bfa')); bl.setColorAt(k,col); k++; });
+    bl.count=k; im.instanceMatrix.needsUpdate=bl.instanceMatrix.needsUpdate=true; if (im.instanceColor) im.instanceColor.needsUpdate=true; if (bl.instanceColor) bl.instanceColor.needsUpdate=true;
+  }};
+}
 function makeScatter3D(p){
   const N=90, im=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.3,emissive:0x2a1060,emissiveIntensity:.35}),N); im.frustumCulled=false; p.xg.add(im);
   const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*6),3));
@@ -816,7 +831,7 @@ function makeScatter3D(p){
   return {update(d){
     const notes=S.notes.slice(-N), win=8, now=S.now, x0=-p.w/2+.32, x1=p.w/2-.12, y0=-p.h/2+.22, y1=p.h/2-.12; let k=0;
     for (const e of notes){ if (e.n.rest||e.n.midi==null) continue; const age=now-e.t; if (age<0||age>win) continue;
-      const xx=lerp(x1,x0,age/win), yy=lerp(y0,y1,(clamp(e.n.midi,36,84)-36)/48), fresh=Math.exp(-age*2.5);
+      const xx=lerp(x1,x0,age/win), yy=lerp(y0,y1,scatY(e.n.midi)), fresh=Math.exp(-age*2.5);
       const z=LIFT*.55+(e.n.jong?.25:.08)+(e.n.lead?.2:0)+d*.35+fresh*.25, r=(.035+(e.n.hard?.025:0))*(1+fresh*.8);
       m.compose(new THREE.Vector3(xx,yy,z),q,new THREE.Vector3(r,r,r)); im.setMatrixAt(k,m);
       col.set(e.n.gap?AMBER:(e.n.hard?'#fb7185':(e.n.lead?TEAL:BLUE))); col.lerp(new THREE.Color(0xffffff),fresh*.4); im.setColorAt(k,col);
@@ -850,7 +865,7 @@ function buildPanels(){
   if (!P.roll.extras.length){
     P.roll.extras.push(makeRollVoxels(P.roll)); P.spec.extras.push(makeSpecTowers(P.spec));
     P.dots.extras.push(makeDotSpheres(P.dots)); P.scope.extras.push(makeScopeRibbon(P.scope));
-    P.wave.extras.push(makeWave3D(P.wave)); P.orbit.extras.push(makeOrbit3D(P.orbit)); P.text.extras.push(makeTextLayer(P.text)); P.radial.extras.push(makeScatter3D(P.radial));
+    P.wave.extras.push(makeWave3D(P.wave)); P.orbit.extras.push(makeOrbit3D(P.orbit)); P.text.extras.push(makeTextLayer(P.text)); P.radial.extras.push(makeScatter3D(P.radial)); P.bars.extras.push(makeBars3D(P.bars));
   }
   sky.scale.set(BW+5,BH+4,1);
 }
