@@ -577,8 +577,8 @@ function upcoming(k){ // 앞으로 올 k개의 음
 /* ---------- panels ---------- */
 const P={};
 const draws={
-  text(x,W,H){
-    frame(x,W,H,'INPUT — 써 내려간 말', S.text? `${S.seq.length} CH`:'');
+  text(x,W,H,float){
+    if (!float) frame(x,W,H,'INPUT — 써 내려간 말', S.text? `${S.seq.length} CH`:''); else x.clearRect(0,0,W,H);
     const pad=PPU*.16, top=PPU*.42, cw=PPU*.34, ch=PPU*.5;
     const cols=Math.max(1,Math.floor((W-pad*2)/cw)), rowsMax=Math.max(1,Math.floor((H-top-pad*.5)/ch));
     const seq=S.seq;
@@ -592,6 +592,9 @@ const draws={
     for (let i=startRow*cols;i<seq.length;i++){
       const n=seq[i], r=Math.floor(i/cols)-startRow, c=i%cols, px=pad+c*cw, py=top+r*ch;
       const playing = i===S.playIdx, inGap = S.gapV>.05 && S.gapIdxs.includes(i);
+      if (!float){ // 블록 위에는 떠 있는 글자의 그림자만
+        if (!n.rest){ x.save(); x.filter='blur('+Math.round(PPU*.03)+'px)'; x.fillStyle=playing?'rgba(139,92,246,.45)':'rgba(5,3,10,.45)'; x.fillRect(px+PPU*.07,py+PPU*.1,cw-PPU*.1,ch-PPU*.14); x.restore(); }
+        x.strokeStyle='rgba(233,222,255,.07)'; x.lineWidth=1; x.strokeRect(px,py,cw-3,ch-4); continue; }
       if (inGap){ x.fillStyle=`rgba(139,227,255,${.25+.6*S.gapV})`; x.fillRect(px,py,cw-3,ch-4); }
       if (playing){ x.fillStyle=S.gapActive?'#3aa9d6':BLUE; x.fillRect(px,py,cw-3,ch-4); }
       x.textBaseline='top';
@@ -644,26 +647,20 @@ const draws={
     const lst=S.notes.slice(-28);
     lst.forEach((e,i)=>{ const yy=H*.62+((e.n.midi||60)%24)/24*H*.32, xx=(i/28)*W; x.fillStyle=e.n.gap?AMBER:(e.n.lead?TEAL:'rgba(233,222,255,.25)'); x.fillRect(xx,yy,W/28*.7,H*.03); });
   },
-  radial(x,W,H){
-    frame(x,W,H);
-    x.font=mono(PPU*.15,600); x.textBaseline='middle';
-    [['PIANO',BLUE],['LEAD',TEAL]].forEach(([l,c],i)=>{ x.fillStyle=c; x.fillRect(PPU*.18,PPU*(.25+i*.27),PPU*.13,PPU*.13); x.fillStyle=INK; x.fillText(l,PPU*.42,PPU*(.32+i*.27)); });
-    const cx=W*.6, cy=H*.53, R=Math.min(W*.34,H*.42);
-    x.strokeStyle=LINE; x.lineWidth=1.5; x.beginPath(); x.arc(cx,cy,R,0,7); x.stroke();
-    for (let i=0;i<24;i++){ const a=i/24*Math.PI*2, l=i%6===0?R*.12:R*.05; x.beginPath(); x.moveTo(cx+Math.cos(a)*(R+R*.06),cy+Math.sin(a)*(R+R*.06)); x.lineTo(cx+Math.cos(a)*(R+R*.06+l),cy+Math.sin(a)*(R+R*.06+l)); x.strokeStyle=i%6===0?INK:LINE; x.stroke(); }
-    x.font=mono(PPU*.14,500); x.fillStyle=INK; x.textAlign='center';
-    [['1',0,-1],['2',1,0],['3',0,1],['4',-1,0]].forEach(([l,dx,dy])=>x.fillText(l,cx+dx*R*1.36,cy+dy*R*1.3));
-    const sb=S.stepCount%8, frac=clamp((S.now-S.lastStepT)/STEP,0,1), prog=(sb+frac)/8;
-    const ring=(rad,lw,filter,col)=>{ for (let i=0;i<8;i++){ const e=S.barNotes[i]; if (!e||!filter(e)) continue; const a0=-Math.PI/2+i/8*Math.PI*2+.06, a1=a0+(Math.PI*2/8-.12)*clamp(e.vel,.3,1);
-      x.strokeStyle=e.gap?AMBER:col; x.lineWidth=lw; x.lineCap='round'; x.beginPath(); x.arc(cx,cy,rad,a0,a1); x.stroke(); } };
-    ring(R*.86,R*.1,e=>!e.lead,BLUE); ring(R*.6,R*.07,e=>e.lead,TEAL);
-    x.setLineDash([R*.08,R*.1]); x.lineDashOffset=-S.now*40*S.chaos; x.strokeStyle=TEAL; x.lineWidth=R*.05; x.beginPath(); x.arc(cx,cy,R*.42,0,7); x.stroke(); x.setLineDash([]);
-    if (S.gapV>.01){ x.globalAlpha=S.gapV; x.strokeStyle=AMBER; x.lineWidth=R*.05; x.beginPath(); x.arc(cx,cy,R*.72,0,7); x.stroke(); x.globalAlpha=1; }
-    x.fillStyle=PAPER; x.beginPath(); x.arc(cx,cy,R*.3,0,7); x.fill(); x.strokeStyle=LINE; x.lineWidth=1.5; x.stroke();
-    x.fillStyle=MUTE; x.font=mono(PPU*.12); x.fillText('BAR',cx,cy-R*.14);
-    x.fillStyle=INK; x.font=mono(PPU*.32,600); x.fillText(String(Math.floor(S.stepCount/8)+1),cx,cy+R*.06);
-    x.textAlign='left';
-    const a=-Math.PI/2+prog*Math.PI*2; x.strokeStyle=INK; x.lineWidth=2.5; x.beginPath(); x.moveTo(cx+Math.cos(a)*R*.3,cy+Math.sin(a)*R*.3); x.lineTo(cx+Math.cos(a)*R*1.1,cy+Math.sin(a)*R*1.1); x.stroke();
+  radial(x,W,H){   // 산포도: 가로 = 시간(최근 8초), 세로 = 음높이, 점은 위에 떠 있음
+    frame(x,W,H,'SCATTER — 음 × 시간');
+    x.font=mono(PPU*.13,600); x.textBaseline='middle';
+    [['PIANO',BLUE],['LEAD',TEAL],['HARD',' #fb7185'.trim()]].forEach(([l,c],i)=>{ x.fillStyle=c; x.beginPath(); x.arc(W-PPU*(1.9-i*.62),PPU*.18,PPU*.05,0,7); x.fill(); x.fillStyle=MUTE; x.fillText(l,W-PPU*(1.8-i*.62),PPU*.18); });
+    const L=PPU*.32, R2=W-PPU*.12, T=PPU*.12+PPU*.2, B=H-PPU*.22;
+    x.strokeStyle='rgba(233,222,255,.08)'; x.lineWidth=1;
+    for (let i=0;i<=8;i++){ const xx=lerp(L,R2,i/8); x.beginPath(); x.moveTo(xx,T); x.lineTo(xx,B); x.stroke(); }
+    for (let m=36;m<=84;m+=6){ const yy=lerp(B,T,(m-36)/48); x.beginPath(); x.moveTo(L,yy); x.lineTo(R2,yy); x.stroke(); if (m%12===0){ x.fillStyle=MUTE; x.font=mono(PPU*.09); x.fillText('C'+(m/12-1),PPU*.06,yy); } }
+    x.strokeStyle='rgba(233,222,255,.35)'; x.beginPath(); x.moveTo(L,T); x.lineTo(L,B); x.lineTo(R2,B); x.stroke();
+    x.fillStyle=MUTE; x.font=mono(PPU*.09); x.textAlign='right'; x.fillText('NOW',R2,B+PPU*.1); x.textAlign='left'; x.fillText('-8s',L,B+PPU*.1);
+    // 점들의 그림자 (점은 3D로 떠 있음)
+    const notes=S.notes.slice(-90); x.fillStyle='rgba(5,3,10,.35)';
+    for (const e of notes){ if (e.n.rest||e.n.midi==null) continue; const age=S.now-e.t; if (age<0||age>8) continue;
+      x.beginPath(); x.arc(lerp(R2,L,age/8)+PPU*.04,lerp(B,T,(clamp(e.n.midi,36,84)-36)/48)+PPU*.05,PPU*.04,0,7); x.fill(); }
   },
   lane(x,W,H){
     frame(x,W,H);
@@ -799,6 +796,34 @@ function makeDotSpheres(p){
     im.instanceMatrix.needsUpdate=true; im.instanceColor.needsUpdate=true;
   }};
 }
+function makeTextLayer(p){
+  const c=document.createElement('canvas'), tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,side:THREE.DoubleSide}));
+  m.renderOrder=3; p.xg.add(m); let last='';
+  return {update(d){
+    if (c.width!==p.canvas.width||c.height!==p.canvas.height){ c.width=p.canvas.width; c.height=p.canvas.height; last=''; }
+    m.scale.set(p.w,p.h,1); m.position.z=LIFT*.75+d*.35+p.bump*.15; m.visible=S.seq.length>0;
+    const key=S.text+'|'+S.playIdx+'|'+S.gapActive+'|'+(S.gapV>.05);
+    if (key!==last){ last=key; draws.text(c.getContext('2d'),c.width,c.height,true); tex.needsUpdate=true; }
+  }};
+}
+function makeScatter3D(p){
+  const N=90, im=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshStandardMaterial({color:0xffffff,roughness:.3,emissive:0x2a1060,emissiveIntensity:.35}),N); im.frustumCulled=false; p.xg.add(im);
+  const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*6),3));
+  const stems=new THREE.LineSegments(sg,new THREE.LineBasicMaterial({color:0xd8c8ff,transparent:true,opacity:.35})); stems.frustumCulled=false; p.xg.add(stems);
+  const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color(), A=sg.attributes.position.array;
+  return {update(d){
+    const notes=S.notes.slice(-N), win=8, now=S.now, x0=-p.w/2+.32, x1=p.w/2-.12, y0=-p.h/2+.22, y1=p.h/2-.12; let k=0;
+    for (const e of notes){ if (e.n.rest||e.n.midi==null) continue; const age=now-e.t; if (age<0||age>win) continue;
+      const xx=lerp(x1,x0,age/win), yy=lerp(y0,y1,(clamp(e.n.midi,36,84)-36)/48), fresh=Math.exp(-age*2.5);
+      const z=LIFT*.55+(e.n.jong?.25:.08)+(e.n.lead?.2:0)+d*.35+fresh*.25, r=(.035+(e.n.hard?.025:0))*(1+fresh*.8);
+      m.compose(new THREE.Vector3(xx,yy,z),q,new THREE.Vector3(r,r,r)); im.setMatrixAt(k,m);
+      col.set(e.n.gap?AMBER:(e.n.hard?'#fb7185':(e.n.lead?TEAL:BLUE))); col.lerp(new THREE.Color(0xffffff),fresh*.4); im.setColorAt(k,col);
+      A.set([xx,yy,.02,xx,yy,z-r],k*6); k++; if (k>=N) break; }
+    im.count=k; im.instanceMatrix.needsUpdate=true; if (im.instanceColor) im.instanceColor.needsUpdate=true;
+    sg.setDrawRange(0,k*2); sg.attributes.position.needsUpdate=true;
+  }};
+}
 function makeOrbit3D(p){
   const K=16, N=90, rings=[]; for (let k=0;k<K;k++){ const l=lineObj(N+1,BLUE,.75); p.xg.add(l); rings.push(l); }
   const dot=new THREE.Mesh(new THREE.SphereGeometry(1,32,20),new THREE.MeshStandardMaterial({color:0x07040d,roughness:.2,metalness:.4,emissive:0x2a1060,emissiveIntensity:.35})); p.xg.add(dot);
@@ -824,7 +849,7 @@ function buildPanels(){
   if (!P.roll.extras.length){
     P.roll.extras.push(makeRollVoxels(P.roll)); P.spec.extras.push(makeSpecTowers(P.spec));
     P.dots.extras.push(makeDotSpheres(P.dots)); P.scope.extras.push(makeScopeRibbon(P.scope));
-    P.wave.extras.push(makeWave3D(P.wave)); P.orbit.extras.push(makeOrbit3D(P.orbit));
+    P.wave.extras.push(makeWave3D(P.wave)); P.orbit.extras.push(makeOrbit3D(P.orbit)); P.text.extras.push(makeTextLayer(P.text)); P.radial.extras.push(makeScatter3D(P.radial));
   }
   sky.scale.set(BW+5,BH+4,1);
 }
