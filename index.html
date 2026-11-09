@@ -1351,7 +1351,8 @@ if (!IR){
     I.spd=lerp(I.spd,Math.min(sp/1400,1),1-Math.exp(-dt*3));
     const cen = I.stage==='dark'||I.stage==='reveal';
     I.cx=lerp(I.cx,cen? w/2 : M.px,1-Math.exp(-dt*(cen?4:9))); I.cy=lerp(I.cy,cen? h*.46 : M.py,1-Math.exp(-dt*(cen?4:9)));
-    if (I.stage==='scatter'){ I.st+=dt; if (I.st>1.0){ I.stage='rose'; I.rT=0; sizeFilm(); film.style.display='block'; } }
+    if (I.stage==='scatter'){ I.st+=dt; if (I.st>1.0 && FM.ready){ I.stage='rain'; startRain(); sizeFilm(); film.style.display='block'; } }
+    if (I.stage==='rain'){ if (drawRain(dt)){ I.stage='rose'; I.rT=2.8; } }
     if (I.stage==='rose'){ I.rT+=dt; drawFilm(I.rT,dt);
       if (I.rT>2.9) setHint('커서를 대 보세요 · 클릭하면 장미가 깨집니다');
       if (I.rT>2.9 && I.idle>14) breakRose(innerWidth/2,innerHeight*.4); }
@@ -1474,6 +1475,38 @@ if (!IR){
   function drawBgCover(){ if (!FM.ready) return; const w=innerWidth, h=innerHeight, dpr=Math.min(devicePixelRatio,1.5);
     if (!coverSized){ coverCv.width=Math.round(w*dpr); coverCv.height=Math.round(h*dpr); coverSized=true; addEventListener('resize',()=>{ coverSized=false; }); }
     cctx.setTransform(dpr,0,0,dpr,0,0); bgDraw(cctx,w,h); }
+  /* ---------- 글자가 깨진 뒤: 픽셀이 위에서 쏟아져 내려 장미 화면을 쌓아 올림 ---------- */
+  let RN=null;
+  function startRain(){
+    const w=innerWidth, h=innerHeight, cell=Math.max(10,Math.round(Math.min(w,h)/44)), cols=Math.ceil(w/cell), rows=Math.ceil(h/cell);
+    const tgt=document.createElement('canvas'); tgt.width=w; tgt.height=h; const tx=tgt.getContext('2d'); coverDraw(tx,FM.wide,w,h,1.02+2.8*.012,0,0,'cover');
+    const sm=document.createElement('canvas'); sm.width=cols; sm.height=rows; const sx=sm.getContext('2d'); sx.imageSmoothingQuality='high'; sx.drawImage(tgt,0,0,cols,rows);
+    const d=sx.getImageData(0,0,cols,rows).data, px=[];
+    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){ const o=(r*cols+c)*4;
+      // 아래 줄부터 먼저 쌓이고, 같은 줄 안에서는 무작위로
+      px.push({c,r,col:`rgb(${d[o]},${d[o+1]},${d[o+2]})`, t0:(rows-1-r)/rows*1.3+Math.random()*.55, y:-cell*(2+Math.random()*10)}); }
+    RN={t:0,cell,cols,rows,px,tgt,trail:[]};
+  }
+  function drawRain(dt){
+    const w=innerWidth, h=innerHeight, x=fctx, dpr=FM.dpr, R_=RN, T=(R_.t+=dt), cs=R_.cell; x.setTransform(dpr,0,0,dpr,0,0);
+    x.fillStyle='#050308'; x.fillRect(0,0,w,h);
+    const G=h*3.2; let landed=0;
+    for (const p of R_.px){ const tt=T-p.t0; const ty=p.r*cs; if (tt<0) continue;
+      let y=p.y+.5*G*tt*tt; if (y>=ty){ y=ty; landed++; if (!p.done){ p.done=true; p.bounce=1; } }
+      const b=p.bounce?Math.max(0,p.bounce-=dt*5):0, sq=1+b*.25;
+      if (!p.done && Math.random()<.04) R_.trail.push({x:p.c*cs,y,a:.5,col:p.col});
+      x.fillStyle=p.col; x.fillRect(p.c*cs-(sq-1)*cs/2, y+(sq>1?cs*(1-1/sq):0), cs*sq-1, cs/sq-1);
+      if (!p.done){ x.fillStyle='rgba(230,215,255,.35)'; x.fillRect(p.c*cs, y-cs*1.8, cs-1, cs*1.8); }   // 떨어지는 잔상
+    }
+    // 세로 픽셀 자국
+    for (let k=R_.trail.length-1;k>=0;k--){ const q=R_.trail[k]; q.a-=dt*1.5; if (q.a<=0){ R_.trail.splice(k,1); continue; } x.globalAlpha=q.a; x.fillStyle=q.col; x.fillRect(q.x+cs*.3,q.y-cs*4,cs*.4,cs*4); x.globalAlpha=1; }
+    // 다 쌓이면: 픽셀 모자이크가 선명한 장미로 녹아듦
+    const all=landed>=R_.px.length, done=all?(R_.done=(R_.done||0)+dt):0, k=Math.min(1,done/.5);
+    if (k>0){ x.globalAlpha=k; x.drawImage(R_.tgt,0,0,w,h); x.globalAlpha=1; }
+    x.globalAlpha=.9; x.fillStyle=x.createPattern(FM.lines,'repeat'); x.fillRect(0,0,w,h); x.globalAlpha=1;
+    if (k>=1){ RN=null; return true; } return false;
+  }
+
   // 3) 클릭: 레퍼런스(4.46→5.78→6.12초)의 랙 포커스 — 1.3초 동안 초점이 나가고, 0.35초 만에 스캔라인 보석이 아래에서 올라옴
   let BR=null;
   window.__setBR=t=>{ if (BR) BR.t=t; };
@@ -1690,7 +1723,7 @@ if (!IR){
 
   // 짧게 누르면 깨짐, 끌면 돌리기 (터치에서도)
   let pd=null;
-  intro.addEventListener('pointerdown',e=>{ I.idle=0; if (I.stage==='text'){ scatterAll(e.clientX,e.clientY); return; } if (I.stage==='rose'){ if (I.rT<2.8) I.rT=2.8; else breakRose(e.clientX,e.clientY); return; } if (I.stage==='break') return; if (I.stage!=='gem') return; if (!I.broken && I.stage==='gem') pd={x:e.clientX,y:e.clientY,t:performance.now()}; });
+  intro.addEventListener('pointerdown',e=>{ I.idle=0; if (I.stage==='text'){ scatterAll(e.clientX,e.clientY); return; } if (I.stage==='rain'){ if (RN) RN.t+=1.5; return; } if (I.stage==='rose'){ if (I.rT<2.8) I.rT=2.8; else breakRose(e.clientX,e.clientY); return; } if (I.stage==='break') return; if (I.stage!=='gem') return; if (!I.broken && I.stage==='gem') pd={x:e.clientX,y:e.clientY,t:performance.now()}; });
   intro.addEventListener('pointerup',e=>{
     if (I.broken||!pd) return; const moved=Math.hypot(e.clientX-pd.x,e.clientY-pd.y), quick=performance.now()-pd.t<450; pd=null;
     if (moved>12||!quick) return;
